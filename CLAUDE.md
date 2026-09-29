@@ -28,6 +28,7 @@ The repo is at an early scaffolding stage — most top-level directories are emp
 ### The benchmark target (`src/app/`)
 
 - `src/app/juice-shop/` is OWASP Juice Shop **vendored** (no nested `.git`), pinned to v20.2.0, upstream commit `1618a611b173b4bf114028e6e02549950606e29d`. It is the single benchmark; its `data/static/codefixes/` (vulnerable snippet + correct/incorrect fixes per challenge) is usable as remediation ground truth.
+- Unlike upstream, `package-lock.json` (root and `frontend/`) is committed and the upstream `.npmrc` files with `package-lock=false` were removed, so dependency versions (and Trivy SCA results) are reproducible. Use `npm ci` in CI. Known issue: with the locked Angular 22.2.0, the frontend `sbom` step fails (looks for `dist/frontend/stats.json`, Angular writes `browser-stats.json`) — it doesn't affect the app or tests.
 - It is excluded from the root pre-commit hooks and from gitleaks (`.gitleaks.toml`) because it ships intentional fake secrets and must not be reformatted. It is **not** excluded from CI scanners.
 - **Vulnerabilities in the benchmark app are intentional.** Do not "fix" them unless the task is explicitly to exercise/validate remediation — they are the ground truth used to measure the pipeline. Likewise, Juice Shop's `infrastructure/` and `terraform/` are intentionally insecure and must never be used to deploy real infrastructure.
 
