@@ -1,0 +1,24 @@
+# El benchmark (src/app/juice-shop/) se excluye de los hooks que modifican o
+# validan ficheros: es código de terceros con fallos intencionados y no debe
+# alterarse (cambiaría la ground truth y los partialFingerprints del SARIF).
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^src/app/juice-shop/
+      - id: end-of-file-fixer
+        exclude: ^src/app/juice-shop/
+      - id: check-yaml
+        exclude: ^src/app/juice-shop/
+      - id: check-json
+        exclude: ^src/app/juice-shop/
+      - id: check-added-large-files
+        exclude: ^src/app/juice-shop/
+
+  # gitleaks no recibe la lista de ficheros de pre-commit (escanea el diff
+  # staged), así que su exclusión del benchmark está en .gitleaks.toml.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.1
+    hooks:
+      - id: gitleaks

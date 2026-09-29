@@ -1,0 +1,17 @@
+# Configuración de gitleaks para el hook de pre-commit.
+#
+# OWASP Juice Shop contiene secretos falsos a propósito (claves JWT, tokens,
+# credenciales de retos). Se excluyen del hook local para poder versionar el
+# benchmark, pero NO del escaneo de secretos del pipeline (TruffleHog, Fase 2,
+# Paso 2.4), donde forman parte de la ground truth medida.
+
+title = "tfm-devsecops-ai"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Benchmark deliberadamente vulnerable (secretos falsos intencionados)"
+paths = [
+  '''^src/app/juice-shop/''',
+]
