@@ -1,0 +1,8 @@
+# Finales de línea LF en el repositorio, independientemente del SO del
+# desarrollador. Los runners de CI son Linux: así el código que escanean
+# (y los partialFingerprints del SARIF) coincide con el de local.
+* text=auto eol=lf
+
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
