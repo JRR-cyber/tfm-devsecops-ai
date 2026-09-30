@@ -1,0 +1,33 @@
+{
+  "case_id": "command-injection/async-git_1.13.1",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "command-injection/async-git_1.13.1/async-git.test.js"
+  },
+  "vuln_class": "command-injection",
+  "cwe": "CWE-78",
+  "cve": "CVE-2020-28490",
+  "package": "async-git",
+  "vulnerable_version": "1.13.1",
+  "fixed_version": "1.13.2",
+  "fix_commit": "https://github.com/omrilotan/async-git/commit/d1950a5021f4e19d92f347614be0d85ce991510d",
+  "sink": {
+    "file": "src/lib/reset/index.js",
+    "line": 11,
+    "line_verified": true,
+    "upstream": "lib/reset/index.js:11"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "command-injection",
+      "async-git_1.13.1",
+      "async-git"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

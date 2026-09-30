@@ -23,7 +23,10 @@ The repo is at an early scaffolding stage — most top-level directories are emp
 - `scripts/ai_agent/` — Python orchestrator (`triage_engine.py`) that parses SARIF, triages findings and proposes fixes. Empty.
 - `infra/k8s/` — Kubernetes manifests for deployment. Empty.
 - `docs/architecture/` — architecture documentation. Empty.
+- `docs/benchmark/dataset.md` — methodology of the experimental dataset (sources, selection criteria C1–C7, funnel numbers, limitations). Keep it in sync when the dataset changes.
 - `src/app/` — the **deliberately vulnerable benchmark target** the pipeline is evaluated against.
+- `benchmarks/` — experimental dataset data (see `benchmarks/README.md`): Juice Shop inventory and the SecBench.js subset. `benchmarks/secbench-js/cases/*/*/src/` is vendored, intentionally vulnerable npm package code (same rules as Juice Shop: don't fix, excluded from pre-commit). SecBench.js has no license, so its exploits are **not** vendored — the Docker harness in `benchmarks/secbench-js/harness/` fetches them from a pinned commit.
+- `scripts/benchmarks/` — Python scripts that build the dataset (catalog → select → verify → materialize → detect). Each script documents its usage in its docstring.
 
 ### The benchmark target (`src/app/`)
 

@@ -1,0 +1,33 @@
+{
+  "case_id": "command-injection/apex-publish-static-files_2.0.0",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "command-injection/apex-publish-static-files_2.0.0/apex-publish-static-files.test.js"
+  },
+  "vuln_class": "command-injection",
+  "cwe": "CWE-78",
+  "cve": "CVE-2018-16462",
+  "package": "apex-publish-static-files",
+  "vulnerable_version": "2.0.0",
+  "fixed_version": "2.0.1",
+  "fix_commit": "https://github.com/vincentmorneau/apex-publish-static-files/commit/2209af8f2b65c24aa55ab757e0e05b958c16f063",
+  "sink": {
+    "file": "src/index.js",
+    "line": 54,
+    "line_verified": true,
+    "upstream": "index.js:54"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "command-injection",
+      "apex-publish-static-files_2.0.0",
+      "apex-publish-static-files"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

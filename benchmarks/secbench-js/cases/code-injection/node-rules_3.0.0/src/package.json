@@ -1,0 +1,45 @@
+{
+  "name": "node-rules",
+  "version": "3.0.0",
+  "description": "Business Rules Engine for JavaScript",
+  "keywords": [
+    "bre",
+    "rules",
+    "engine",
+    "rule engine"
+  ],
+  "author": {
+    "name": "Mithun Satheesh",
+    "email": "mithunsatish@gmail.com"
+  },
+  "contributors": [
+    {
+        "name": "Abdul Munim Kazia",
+        "email" : "munim2020@gmail.com",
+        "url" : "http://munimkazia.com"
+    },
+    {
+        "name": "ramanaveli2i",
+        "url" : "https://github.com/ramanaveli2i"
+    }
+  ],
+  "repository" : { 
+      "type" : "git",
+      "url" : "https://github.com/mithunsatheesh/node-rules"
+  },
+  "dependencies": {
+    "underscore": ">= 1.7"
+  },
+  "devDependencies": {
+      "mocha": "1.6.0",
+      "chai": "*"
+  },
+  "main": "index.js",
+  "engines": {
+    "node": ">= 0.4.x"
+  },
+  "scripts": {
+   "test": "./node_modules/mocha/bin/mocha"
+  },
+  "readmeFilename": "README.md"
+}

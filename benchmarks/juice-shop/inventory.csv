@@ -1,0 +1,24 @@
+vuln_id,file,snippet_line,challenges,cwe,vuln_class,status,reason
+JS-01,routes/login.ts,17,loginAdminChallenge;loginBenderChallenge;loginJimChallenge,CWE-89,sql-injection,candidate,User input concatenated into a raw SQL query
+JS-02,routes/search.ts,18,unionSqlInjectionChallenge;dbSchemaChallenge,CWE-89,sql-injection,candidate,Search term concatenated into a raw SQL query
+JS-03,routes/updateProductReviews.ts,13,noSqlReviewsChallenge,CWE-943,nosql-injection,candidate,Request body used unchecked as a MongoDB query selector
+JS-04,routes/updateProductReviews.ts,13,forgedReviewChallenge,CWE-639,broken-access-control,candidate,Review updated without checking the author is the authenticated user
+JS-05,lib/insecurity.ts,121,redirectChallenge;redirectCryptoCurrencyChallenge,CWE-601,open-redirect,candidate,Redirect allowlist check matches substrings instead of exact URLs
+JS-06,frontend/src/app/search-result/search-result.component.ts,61,restfulXssChallenge,CWE-79,xss,candidate,Server data rendered with Angular sanitization bypassed
+JS-07,frontend/src/app/search-result/search-result.component.ts,135,localXssChallenge;xssBonusChallenge,CWE-79,xss,candidate,Search query reflected into the DOM with sanitization bypassed
+JS-08,server.ts,286,directoryListingChallenge;accessLogDisclosureChallenge,CWE-548,information-exposure,candidate,Directory listing enabled on /ftp and log folders
+JS-09,server.ts,359,resetPasswordMortyChallenge,CWE-348,rate-limit-bypass,candidate,Rate limiter keyed on client-controlled X-Forwarded-For header
+JS-10,server.ts,369,changeProductChallenge,CWE-285,broken-access-control,candidate,Product update endpoint not restricted to authorized roles
+JS-11,server.ts,498,registerAdminChallenge,CWE-915,mass-assignment,candidate,Auto-generated REST endpoint accepts the role attribute on user creation
+JS-12,server.ts,746,exposedMetricsChallenge,CWE-200,information-exposure,candidate,Prometheus metrics endpoint served without authentication
+JS-13,models/user.ts,36,weakPasswordChallenge,CWE-521,weak-password-policy,candidate,No password strength validation on the user model
+JS-14,frontend/src/app/app.routing.ts,76,adminSectionChallenge;scoreBoardChallenge;web3SandboxChallenge,CWE-425,client-side-routing,excluded,Client-side route exposure; no server-side flaw for a code patch to fix
+JS-15,frontend/src/app/app.routing.ts,254,tokenSaleChallenge,CWE-425,client-side-routing,excluded,Client-side route exposure; no server-side flaw for a code patch to fix
+JS-16,data/static/securityQuestions.yml,1,resetPasswordBjoernOwaspChallenge;resetPasswordBjoernChallenge;resetPasswordJimChallenge;resetPasswordBenderChallenge;resetPasswordUvoginChallenge,CWE-640,weak-recovery-mechanism,excluded,Weakness lies in guessable user data and the recovery design; not a code defect
+JS-17,routes/chat.ts,81,chatbotGreedyInjectionChallenge,LLM01,prompt-injection,excluded,LLM prompt injection; outside the SAST/SCA/secrets scope of the pipeline
+JS-18,routes/chat.ts,175,chatbotPromptInjectionChallenge,LLM01,prompt-injection,excluded,LLM prompt injection; outside the SAST/SCA/secrets scope of the pipeline
+JS-19,terraform/networking.tf,1,iacLeakedKeyChallenge,CWE-798,hardcoded-secret,excluded,Secret in IaC; ground truth for the secrets scanner (TruffleHog) rather than for code remediation
+JS-20,infrastructure/docker-compose.yml,1,vulnerableDockerImageChallenge,CWE-1104,vulnerable-component,excluded,Outdated container image; ground truth for container scanning (Trivy) rather than for code remediation
+JS-21,data/static/web3-snippets/JuiceShopSBT.sol,2,nftUnlockChallenge,,smart-contract,excluded,Solidity; outside the JavaScript/TypeScript scope
+JS-22,data/static/web3-snippets/HoneyPotNFT.sol,2,nftMintChallenge,,smart-contract,excluded,Solidity; outside the JavaScript/TypeScript scope
+JS-23,data/static/web3-snippets/ETHWalletBank.sol,2,web3WalletChallenge,,smart-contract,excluded,Solidity; outside the JavaScript/TypeScript scope

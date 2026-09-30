@@ -1,0 +1,33 @@
+{
+  "case_id": "redos/ajv_5.2.2",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "redos/ajv_5.2.2/ajv.test.js"
+  },
+  "vuln_class": "redos",
+  "cwe": "CWE-1333",
+  "cve": "CVE-2020-15366",
+  "package": "ajv",
+  "vulnerable_version": "5.2.2",
+  "fixed_version": "6.12.3",
+  "fix_commit": null,
+  "sink": {
+    "file": "src/lib/compile/util.js",
+    "line": 143,
+    "line_verified": true,
+    "upstream": "util.js:143"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "redos",
+      "ajv_5.2.2",
+      "ajv"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

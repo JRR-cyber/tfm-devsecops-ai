@@ -1,0 +1,33 @@
+{
+  "case_id": "command-injection/pdfinfojs_0.3.6",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "command-injection/pdfinfojs_0.3.6/pdfinfojs.test.js"
+  },
+  "vuln_class": "command-injection",
+  "cwe": "CWE-78",
+  "cve": "CVE-2018-3746",
+  "package": "pdfinfojs",
+  "vulnerable_version": "0.3.6",
+  "fixed_version": "0.4.1",
+  "fix_commit": null,
+  "sink": {
+    "file": "src/lib/pdfinfo.js",
+    "line": 47,
+    "line_verified": true,
+    "upstream": "lib/pdfinfo.js:47"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "command-injection",
+      "pdfinfojs_0.3.6",
+      "pdfinfojs"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

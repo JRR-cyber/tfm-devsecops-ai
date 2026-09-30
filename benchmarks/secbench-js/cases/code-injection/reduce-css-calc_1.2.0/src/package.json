@@ -1,0 +1,35 @@
+{
+  "name": "reduce-css-calc",
+  "version": "1.2.0",
+  "description": "Reduce CSS calc() function to the maximum",
+  "keywords": [
+    "css",
+    "calculation",
+    "calc"
+  ],
+  "author": "Maxime Thirouin",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MoOx/reduce-css-calc.git"
+  },
+  "files": [
+    "CHANGELOG.md",
+    "LICENSE",
+    "index.js"
+  ],
+  "dependencies": {
+    "balanced-match": "^0.1.0",
+    "reduce-function-call": "^1.0.1"
+  },
+  "devDependencies": {
+    "jscs": "^1.5.9",
+    "jshint": "^2.5.2",
+    "tape": "^2.13.4"
+  },
+  "scripts": {
+    "jscs": "jscs *.js **/*.js",
+    "jshint": "jshint . --exclude node_modules",
+    "test": "npm run jscs && npm run jshint && tape test"
+  }
+}

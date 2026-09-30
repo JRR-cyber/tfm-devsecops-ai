@@ -1,0 +1,33 @@
+{
+  "case_id": "redos/hosted-git-info_3.0.0",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "redos/hosted-git-info_3.0.0/hosted-git-info.test.js"
+  },
+  "vuln_class": "redos",
+  "cwe": "CWE-1333",
+  "cve": "CVE-2021-23362",
+  "package": "hosted-git-info",
+  "vulnerable_version": "3.0.0",
+  "fixed_version": "3.0.8",
+  "fix_commit": "https://github.com/npm/hosted-git-info/commit/bede0dc38e1785e732bf0a48ba6f81a4a908eba3",
+  "sink": {
+    "file": "src/index.js",
+    "line": 44,
+    "line_verified": true,
+    "upstream": "index.js:44"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "redos",
+      "hosted-git-info_3.0.0",
+      "hosted-git-info"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

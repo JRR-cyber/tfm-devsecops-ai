@@ -1,0 +1,33 @@
+{
+  "case_id": "prototype-pollution/jsonpointer_4.0.0",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "prototype-pollution/jsonpointer_4.0.0/jsonpointer.test.js"
+  },
+  "vuln_class": "prototype-pollution",
+  "cwe": "CWE-1321",
+  "cve": "CVE-2021-23807",
+  "package": "jsonpointer",
+  "vulnerable_version": "4.0.0",
+  "fixed_version": "5.0.0",
+  "fix_commit": "https://github.com/janl/node-jsonpointer/commit/a0345f3550cd9c4d89f33b126390202b89510ad4",
+  "sink": {
+    "file": "src/jsonpointer.js",
+    "line": 43,
+    "line_verified": true,
+    "upstream": "jsonpointer.js:43"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "prototype-pollution",
+      "jsonpointer_4.0.0",
+      "jsonpointer"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

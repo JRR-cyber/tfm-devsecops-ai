@@ -14,4 +14,5 @@ useDefault = true
 description = "Benchmark deliberadamente vulnerable (secretos falsos intencionados)"
 paths = [
   '''^src/app/juice-shop/''',
+  '''^benchmarks/secbench-js/cases/[^/]+/[^/]+/src/''',
 ]

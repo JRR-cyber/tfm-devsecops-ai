@@ -1,0 +1,4 @@
+# Vendored package sources are tracked verbatim, including folders that the
+# root .gitignore excludes for our own code (dist/, coverage/, out/, ...):
+# for some packages the vulnerable code only exists in dist/.
+!*

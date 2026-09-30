@@ -1,0 +1,33 @@
+{
+  "case_id": "command-injection/bestzip_2.1.6",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "command-injection/bestzip_2.1.6/bestzip.test.js"
+  },
+  "vuln_class": "command-injection",
+  "cwe": "CWE-78",
+  "cve": "CVE-2020-7730",
+  "package": "bestzip",
+  "vulnerable_version": "2.1.6",
+  "fixed_version": "2.1.7",
+  "fix_commit": "https://github.com/nfriedly/node-bestzip/commit/45d4a901478c6a8f396c8b959dd6cf8fd3f955b6",
+  "sink": {
+    "file": "src/lib/bestzip.js",
+    "line": 27,
+    "line_verified": true,
+    "upstream": "lib/bestzip.js:27"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "command-injection",
+      "bestzip_2.1.6",
+      "bestzip"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "case_id": "prototype-pollution/changeset_0.1.0",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "prototype-pollution/changeset_0.1.0/changeset.test.js"
+  },
+  "vuln_class": "prototype-pollution",
+  "cwe": "CWE-1321",
+  "cve": "CVE-2021-25915",
+  "package": "changeset",
+  "vulnerable_version": "0.1.0",
+  "fixed_version": "0.2.6",
+  "fix_commit": "https://github.com/eugeneware/changeset/commit/9e588844edbb9993b32e7366cc799262b4447f99",
+  "sink": {
+    "file": "src/index.js",
+    "line": 81,
+    "line_verified": true,
+    "upstream": "index.js:81"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "prototype-pollution",
+      "changeset_0.1.0",
+      "changeset"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}
