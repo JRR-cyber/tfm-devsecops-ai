@@ -1,0 +1,33 @@
+{
+  "case_id": "code-injection/node-rules_3.0.0",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "code-injection/node-rules_3.0.0/node-rules.test.js"
+  },
+  "vuln_class": "code-injection",
+  "cwe": "CWE-94",
+  "cve": "CVE-2020-7609",
+  "package": "node-rules",
+  "vulnerable_version": "3.0.0",
+  "fixed_version": "5.0.0",
+  "fix_commit": null,
+  "sink": {
+    "file": "src/lib/node-rules.js",
+    "line": 245,
+    "line_verified": true,
+    "upstream": "lib/node-rules.js:245"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "code-injection",
+      "node-rules_3.0.0",
+      "node-rules"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

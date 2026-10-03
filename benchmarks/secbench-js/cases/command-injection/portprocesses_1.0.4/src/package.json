@@ -1,0 +1,28 @@
+{
+  "name": "portprocesses",
+  "version": "1.0.4",
+  "description": "This tool letes you list and kill processes on a specified port.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postversion": "git push -u && git push --tags && npm publish"
+  },
+  "bin": {
+    "portprocesses": "cli.js"
+  },
+  "keywords": [
+    "process",
+    "port",
+    "manager"
+  ],
+  "author": "rrainn, Inc.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rrainn/PortProcesses.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rrainn/PortProcesses/issues"
+  },
+  "homepage": "https://github.com/rrainn/PortProcesses#readme"
+}

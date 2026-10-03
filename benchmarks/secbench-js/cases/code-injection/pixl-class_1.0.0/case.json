@@ -1,0 +1,33 @@
+{
+  "case_id": "code-injection/pixl-class_1.0.0",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "code-injection/pixl-class_1.0.0/pixl-class.test.js"
+  },
+  "vuln_class": "code-injection",
+  "cwe": "CWE-94",
+  "cve": "CVE-2020-7640",
+  "package": "pixl-class",
+  "vulnerable_version": "1.0.0",
+  "fixed_version": "1.0.3",
+  "fix_commit": "https://github.com/jhuckaby/pixl-class/commit/47677a3638e3583e42f3a05cc7f0b30293d2acc8",
+  "sink": {
+    "file": "src/class.js",
+    "line": 26,
+    "line_verified": true,
+    "upstream": "class.js:26"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "code-injection",
+      "pixl-class_1.0.0",
+      "pixl-class"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

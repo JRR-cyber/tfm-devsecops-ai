@@ -1,0 +1,33 @@
+{
+  "case_id": "redos/ua-parser-js_0.7.22",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "redos/ua-parser-js_0.7.22/ua-parser.test.js"
+  },
+  "vuln_class": "redos",
+  "cwe": "CWE-1333",
+  "cve": "CVE-2021-27292",
+  "package": "ua-parser-js",
+  "vulnerable_version": "0.7.22",
+  "fixed_version": "0.7.24",
+  "fix_commit": "https://github.com/faisalman/ua-parser-js/commit/809439e20e273ce0d25c1d04e111dcf6011eb566",
+  "sink": {
+    "file": "src/src/ua-parser.js",
+    "line": 98,
+    "line_verified": true,
+    "upstream": "ua-parser.js:98"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "redos",
+      "ua-parser-js_0.7.22",
+      "ua-parser-js"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}
