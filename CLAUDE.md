@@ -17,12 +17,13 @@ Fixed design decisions (roadmap v2 — don't substitute tools without being aske
 
 ## Repository layout
 
-The repo is at an early scaffolding stage — most top-level directories are empty placeholders for planned components:
+Some top-level directories are still placeholders for later phases:
 
-- `.github/workflows/` — CI pipeline (`devsecops-pipeline.yml`: scanners → unified SARIF → AI agent). Empty. Only root workflows run; Juice Shop's own `.github/` is inert. Default `GITHUB_TOKEN` is read-only at repo level — grant write permissions per-job in the workflow. For the agent to open PRs (Phase 3), the repo setting "Allow GitHub Actions to create and approve pull requests" must also be enabled (currently off on purpose). Dependabot security updates are deliberately disabled so they don't "fix" the benchmark's vulnerable dependencies.
+- `.github/workflows/devsecops-pipeline.yml` — CI pipeline (Phase 2): Semgrep, CodeQL, Trivy (lockfiles + Juice Shop image) and TruffleHog in parallel, then `unify` merges them into `unified/findings.sarif` (one SARIF run per job, plus a line-independent `partialFingerprints["tfmContextHash/v1"]` on every result). Design and security decisions: `docs/architecture/pipeline.md`. Actions are pinned by commit SHA and scanner images by digest — keep it that way when bumping versions. No job uses secrets (fork PRs behave the same); the Phase 3 agent must not run on `pull_request_target`. Pushing workflow files needs a token with the `workflow` scope. Only root workflows run; Juice Shop's own `.github/` is inert. Default `GITHUB_TOKEN` is read-only at repo level — grant write permissions per-job in the workflow. For the agent to open PRs (Phase 3), the repo setting "Allow GitHub Actions to create and approve pull requests" must also be enabled (currently off on purpose). Dependabot security updates are deliberately disabled so they don't "fix" the benchmark's vulnerable dependencies.
 - `scripts/ai_agent/` — Python orchestrator (`triage_engine.py`) that parses SARIF, triages findings and proposes fixes. Empty.
 - `infra/k8s/` — Kubernetes manifests for deployment. Empty.
-- `docs/architecture/` — architecture documentation. Empty.
+- `scripts/pipeline/` — CI helpers: `unify_results.py` (Phase 2.6 unified artifact) and TruffleHog's exclude list.
+- `docs/architecture/` — architecture documentation (`pipeline.md`).
 - `docs/benchmark/dataset.md` — methodology of the experimental dataset (sources, selection criteria C1–C7, funnel numbers, limitations). Keep it in sync when the dataset changes.
 - `src/app/` — the **deliberately vulnerable benchmark target** the pipeline is evaluated against.
 - `benchmarks/` — experimental dataset data (see `benchmarks/README.md`): Juice Shop inventory and the SecBench.js subset. `benchmarks/secbench-js/cases/*/*/src/` is vendored, intentionally vulnerable npm package code (same rules as Juice Shop: don't fix, excluded from pre-commit). SecBench.js has no license, so its exploits are **not** vendored — the Docker harness in `benchmarks/secbench-js/harness/` fetches them from a pinned commit.
@@ -31,7 +32,7 @@ The repo is at an early scaffolding stage — most top-level directories are emp
 ### The benchmark target (`src/app/`)
 
 - `src/app/juice-shop/` is OWASP Juice Shop **vendored** (no nested `.git`), pinned to v20.2.0, upstream commit `1618a611b173b4bf114028e6e02549950606e29d`. It is the single benchmark; its `data/static/codefixes/` (vulnerable snippet + correct/incorrect fixes per challenge) is usable as remediation ground truth.
-- Unlike upstream, `package-lock.json` (root and `frontend/`) is committed and the upstream `.npmrc` files with `package-lock=false` were removed, so dependency versions (and Trivy SCA results) are reproducible. Use `npm ci` in CI. Known issue: with the locked Angular 22.2.0, the frontend `sbom` step fails (looks for `dist/frontend/stats.json`, Angular writes `browser-stats.json`) — it doesn't affect the app or tests.
+- Unlike upstream, `package-lock.json` (root and `frontend/`) is committed and the upstream `.npmrc` files with `package-lock=false` were removed, so dependency versions (and Trivy SCA results) are reproducible. Use `npm ci` in CI. The frontend `sbom` script was also patched to read `dist/frontend/browser-stats.json` (Angular 22 no longer writes `stats.json`); without it `npm install` and `docker build` fail. Both are build-tooling deviations from upstream; no vulnerable code was touched.
 - It is excluded from the root pre-commit hooks and from gitleaks (`.gitleaks.toml`) because it ships intentional fake secrets and must not be reformatted. It is **not** excluded from CI scanners.
 - **Vulnerabilities in the benchmark app are intentional.** Do not "fix" them unless the task is explicitly to exercise/validate remediation — they are the ground truth used to measure the pipeline. Likewise, Juice Shop's `infrastructure/` and `terraform/` are intentionally insecure and must never be used to deploy real infrastructure.
 
