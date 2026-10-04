@@ -38,12 +38,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # --config auto requires metrics; --dataflow-traces adds codeFlows to taint findings.
+      # --config auto requires metrics. No --dataflow-traces: logged-out Semgrep strips
+      # the traces anyway (docs/architecture/pipeline.md, section 4).
       - name: Scan
         run: |
           mkdir -p results
-          semgrep scan --config auto --metrics on --dataflow-traces \
-            --sarif --output results/semgrep.sarif .
+          semgrep scan --config auto --metrics on --sarif --output results/semgrep.sarif .
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: scan-semgrep
@@ -58,6 +58,10 @@ jobs:
       contents: read
       actions: read
       security-events: write
+    env:
+      # On PRs the action otherwise reports dataflow alerts only inside the diff;
+      # the agent needs every finding, whatever the PR touched.
+      CODEQL_ACTION_DIFF_INFORMED_QUERIES: "false"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
