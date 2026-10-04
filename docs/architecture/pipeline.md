@@ -14,7 +14,7 @@ trufflehog ──┘
 
 | Job | Pilar | Herramienta | Qué analiza | Salida |
 |---|---|---|---|---|
-| `semgrep` | SAST | Semgrep OSS 1.178.0, `--config auto --dataflow-traces` | Todo el repositorio | SARIF |
+| `semgrep` | SAST | Semgrep OSS 1.178.0, `--config auto` | Todo el repositorio | SARIF |
 | `codeql` | Dataflow/taint | CodeQL, suite `security-extended`, `javascript-typescript` | Todo el repositorio | SARIF (también se sube a *code scanning*) |
 | `trivy-fs` | SCA | Trivy 0.74.0, `fs --scanners vuln` | Lockfiles (`package-lock.json` de Juice Shop) | JSON + SARIF |
 | `trivy-image` | Contenedor | Trivy 0.74.0, `image` | Imagen construida con el `Dockerfile` de Juice Shop | JSON + SARIF |
@@ -34,7 +34,14 @@ Un único log SARIF 2.1.0 con **un `run` por job**. Se respetan los resultados d
 
 ### Huella para emparejar hallazgos antes y después del parche
 
-La Fase 4 tiene que distinguir los hallazgos que el parche introduce de los que ya existían. No puede hacerse por número de línea: el parche desplaza líneas y los hallazgos preexistentes parecerían nuevos. Las huellas nativas no sirven como clave común, porque cada herramienta las rellena de forma distinta (CodeQL sí calcula `primaryLocationLineHash`, Trivy no rellena `partialFingerprints`).
+La Fase 4 tiene que distinguir los hallazgos que el parche introduce de los que ya existían. No puede hacerse por número de línea: el parche desplaza líneas y los hallazgos preexistentes parecerían nuevos. Las huellas nativas no sirven como clave común. En la primera ejecución:
+
+| Herramienta | Huella nativa |
+|---|---|
+| CodeQL | `partialFingerprints.primaryLocationLineHash` (sí, independiente de la línea) |
+| Semgrep OSS | `fingerprints.matchBasedId/v1` = `"requires login"`: solo se rellena con sesión en Semgrep AppSec Platform |
+| Trivy | ninguna |
+| TruffleHog | ninguna (no genera SARIF) |
 
 `tfmContextHash/v1` = `sha256(job, regla, archivo, texto normalizado de las líneas señaladas)` + `:<n>`, donde `n` numera las apariciones con la misma clave (el mismo esquema que `primaryLocationLineHash` de GitHub). El texto se normaliza colapsando espacios, así que la huella no cambia si se insertan o se borran líneas en otra parte del archivo, ni si se reindenta. Sí cambia si se modifica la propia línea señalada; en ese caso el hallazgo original desaparece y, si sigue habiendo uno, cuenta como nuevo. Es el comportamiento buscado.
 
@@ -62,7 +69,13 @@ TruffleHog puede "verificar" cada secreto probándolo contra la API del proveedo
 
 ## 4. Validación de las trazas de taint (Paso 2.5)
 
-Pendiente de la primera ejecución en CI: qué herramienta produce `codeFlows` y con qué granularidad. El resumen de `unify` cuenta, por herramienta, los hallazgos con `codeFlows` y la mediana de pasos por traza.
+La hoja de ruta pedía comprobar empíricamente si el SARIF de Semgrep trae la traza de propagación o si hace falta CodeQL. El resumen de `unify` cuenta, por herramienta, los hallazgos con `codeFlows` y la mediana de pasos por traza.
+
+**Semgrep OSS no aporta trazas.** En la primera ejecución, con `--dataflow-traces`, ninguno de sus 248 hallazgos tenía `codeFlows`, aunque reglas de modo taint como `express-sequelize-injection` sí detectan la inyección SQL de `routes/login.ts`. Para descartar que fuera un problema de las reglas del registro, se reprodujo en local con Semgrep 1.178.0 y una regla de taint mínima propia (`source()` → `sink()`). Ni la salida JSON (`dataflow_trace`) ni la SARIF (`codeFlows`) incluyen la traza, y el campo `lines` aparece como `"requires login"`. Semgrep solo publica trazas, fragmentos y huellas a usuarios con sesión en su plataforma comercial.
+
+Iniciar sesión exigiría guardar un token de Semgrep como secreto en el pipeline (rompiendo la regla de jobs sin secretos de la sección 3) y enviar datos del análisis a un servicio comercial. Por eso **la fuente de las trazas de taint es CodeQL**, y Semgrep queda como capa adicional de reglas de patrones (más cobertura, sin traza).
+
+**CodeQL en PRs: análisis limitado al diff.** En `pull_request`, codeql-action solo informa de las alertas de dataflow que caen dentro del diff del PR. La extensión `codeql-action/pr-diff-range` del SARIF lo delata. En la primera ejecución solo salieron 9 hallazgos con traza, sin la inyección SQL de Juice Shop. Como el agente necesita todos los hallazgos, se desactiva con `CODEQL_ACTION_DIFF_INFORMED_QUERIES=false`.
 
 ## 5. Desviaciones respecto a Juice Shop original
 
