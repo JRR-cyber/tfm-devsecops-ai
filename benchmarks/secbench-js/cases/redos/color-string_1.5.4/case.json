@@ -1,0 +1,33 @@
+{
+  "case_id": "redos/color-string_1.5.4",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "redos/color-string_1.5.4/color-string.test.js"
+  },
+  "vuln_class": "redos",
+  "cwe": "CWE-1333",
+  "cve": "CVE-2021-29060",
+  "package": "color-string",
+  "vulnerable_version": "1.5.4",
+  "fixed_version": "1.5.5",
+  "fix_commit": "https://github.com/Qix-/color-string/commit/0789e21284c33d89ebc4ab4ca6f759b9375ac9d3",
+  "sink": {
+    "file": "src/index.js",
+    "line": 154,
+    "line_verified": true,
+    "upstream": "index.js:154"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "redos",
+      "color-string_1.5.4",
+      "color-string"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

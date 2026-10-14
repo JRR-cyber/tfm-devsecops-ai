@@ -1,0 +1,33 @@
+{
+  "case_id": "prototype-pollution/immer_8.0.0",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "prototype-pollution/immer_8.0.0/immer.test.js"
+  },
+  "vuln_class": "prototype-pollution",
+  "cwe": "CWE-1321",
+  "cve": "CVE-2021-23436",
+  "package": "immer",
+  "vulnerable_version": "8.0.0",
+  "fixed_version": "9.0.6",
+  "fix_commit": "https://github.com/immerjs/immer/commit/fa671e55ee9bd42ae08cc239102b665a23958237",
+  "sink": {
+    "file": "src/src/plugins/patches.ts",
+    "line": 245,
+    "line_verified": true,
+    "upstream": "src/plugins/patches.ts:245"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "prototype-pollution",
+      "immer_8.0.0",
+      "immer"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

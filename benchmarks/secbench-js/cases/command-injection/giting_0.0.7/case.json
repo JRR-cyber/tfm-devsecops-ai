@@ -1,0 +1,33 @@
+{
+  "case_id": "command-injection/giting_0.0.7",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "command-injection/giting_0.0.7/giting.test.js"
+  },
+  "vuln_class": "command-injection",
+  "cwe": "CWE-78",
+  "cve": "CVE-2019-10802",
+  "package": "giting",
+  "vulnerable_version": "0.0.7",
+  "fixed_version": "0.0.8",
+  "fix_commit": "https://github.com/MangoRaft/git/commit/9be41081f547d3dcef25e7d7c957bc2a3be2dfe0",
+  "sink": {
+    "file": "src/lib/git.js",
+    "line": 223,
+    "line_verified": true,
+    "upstream": "lib/git.js:223"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "command-injection",
+      "giting_0.0.7",
+      "giting"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

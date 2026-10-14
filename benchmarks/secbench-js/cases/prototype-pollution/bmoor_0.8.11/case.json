@@ -1,0 +1,33 @@
+{
+  "case_id": "prototype-pollution/bmoor_0.8.11",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "prototype-pollution/bmoor_0.8.11/bmoor.test.js"
+  },
+  "vuln_class": "prototype-pollution",
+  "cwe": "CWE-1321",
+  "cve": "CVE-2020-7736",
+  "package": "bmoor",
+  "vulnerable_version": "0.8.11",
+  "fixed_version": "0.8.12",
+  "fix_commit": null,
+  "sink": {
+    "file": "src/src/core.js",
+    "line": 194,
+    "line_verified": true,
+    "upstream": "src/core.js:194"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "prototype-pollution",
+      "bmoor_0.8.11",
+      "bmoor"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

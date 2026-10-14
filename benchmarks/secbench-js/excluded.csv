@@ -1,0 +1,9 @@
+case_id,reason
+command-injection/hot-formula-parser_3.0.0,duplicate CVE CVE-2020-6836
+code-injection/hot-formula-parser_3.0.0,"C3b: sink in minified/generated code (src/lib/grammar-parser/grammar-parser.js, longest line 5243 chars)"
+prototype-pollution/jointjs_2.2.1,"C3b: sink in minified/generated code (src/dist/joint.min.js, longest line 208776 chars)"
+prototype-pollution/sds_3.2.0,C3b: sink not found in the package (upstream js:34)
+prototype-pollution/set-or-get_1.2.10,C3b: sink not found in the package (upstream build/utils.js:391)
+redos/html-parse-stringify_2.0.0,"C3b: sink in minified/generated code (src/dist/html-parse-stringify.js, longest line 2088 chars)"
+redos/semver-regex_3.1.1,C3b: sink not found in the package (upstream jasmineAsyncInstall.js:106)
+redos/three_0.122.0,C3b: sink not found in the package (upstream three.js:6333)

@@ -14,8 +14,12 @@ Requires Docker and the harness image:
     docker build -t tfm/secbench-harness benchmarks/secbench-js/harness
 
 Usage:
-    python scripts/benchmarks/secbench_verify.py <candidates_csv> <out_csv> [workers]
+    python scripts/benchmarks/secbench_verify.py <candidates_csv> <out_csv> [workers] [--reuse <verification_csv>]
     python scripts/benchmarks/secbench_verify.py --recheck-osv <verification_csv>
+
+``--reuse`` copies the rows of cases already present in an earlier
+verification instead of re-running their exploits (used when the sample is
+enlarged: the draw is a superset of the earlier one, see secbench_select.py).
 """
 
 import csv
@@ -115,6 +119,17 @@ def verify(row: dict) -> dict:
 
 
 def main() -> None:
+    args = sys.argv[1:]
+    reuse = {}
+    if "--reuse" in args:
+        i = args.index("--reuse")
+        with Path(args[i + 1]).open(encoding="utf-8") as fh:
+            reuse = {r["case_id"]: r for r in csv.DictReader(fh)}
+        for row in reuse.values():
+            for key in ("c4_consistent", "c5_reproduces", "c6_fix_blocks_exploit", "verified"):
+                row[key] = row[key] == "True"
+        del args[i:i + 2]
+    sys.argv[1:] = args
     if len(sys.argv) not in (3, 4):
         sys.exit(__doc__)
 
@@ -127,8 +142,11 @@ def main() -> None:
         workers = int(sys.argv[3]) if len(sys.argv) > 3 else 4
         with candidates.open(encoding="utf-8") as fh:
             rows = list(csv.DictReader(fh))
+        todo = [r for r in rows if r["case_id"] not in reuse]
+        print(f"{len(rows) - len(todo)} reused, {len(todo)} to verify")
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            results = list(pool.map(verify, rows))
+            done = {r["case_id"]: r for r in pool.map(verify, todo)}
+        results = [done.get(r["case_id"]) or reuse[r["case_id"]] for r in rows]
 
     with out_csv.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(results[0]), lineterminator="\n")
