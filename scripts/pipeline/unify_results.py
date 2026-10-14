@@ -45,7 +45,7 @@ def job_of(path: Path, results_dir: Path) -> str:
 
 
 def normalise_uri(uri: str) -> str:
-    uri = uri.removeprefix("file://")
+    uri = uri.removeprefix("file://").replace("\\", "/")
     for prefix in ("/repo/", "/work/", "/src/"):
         uri = uri.removeprefix(prefix)
     return uri.removeprefix("./")

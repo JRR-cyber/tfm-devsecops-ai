@@ -45,6 +45,10 @@ La Fase 4 tiene que distinguir los hallazgos que el parche introduce de los que 
 
 `tfmContextHash/v1` = `sha256(job, regla, archivo, texto normalizado de las líneas señaladas)` + `:<n>`, donde `n` numera las apariciones con la misma clave (el mismo esquema que `primaryLocationLineHash` de GitHub). El texto se normaliza colapsando espacios, así que la huella no cambia si se insertan o se borran líneas en otra parte del archivo, ni si se reindenta. Sí cambia si se modifica la propia línea señalada; en ese caso el hallazgo original desaparece y, si sigue habiendo uno, cuenta como nuevo. Es el comportamiento buscado.
 
+**Validación.** Se escaneó con Semgrep 1.178.0 una copia de `routes/` y `lib/` de Juice Shop, antes y después de un parche simulado: tres líneas insertadas al principio de `routes/login.ts` y de `lib/insecurity.ts`, una línea reindentada en `routes/captcha.ts` y la línea vulnerable de `routes/search.ts` modificada. De 18 hallazgos, 17 conservan la huella, incluidos los 4 desplazados tres líneas y el reindentado. Solo el de la línea modificada aparece como "desaparecido + nuevo".
+
+**Consecuencia para la Fase 4.** Si el parche modifica la línea vulnerable pero la deja vulnerable, la huella dice que el hallazgo original desapareció y que hay uno nuevo. Por eso la huella sirve para medir la *regresión* (hallazgos nuevos introducidos en otras partes), pero no basta para decidir si la vulnerabilidad se corrigió. Esa comprobación debe exigir, además, que no quede ningún hallazgo de la misma regla en la zona del parche.
+
 Para los hallazgos sin línea de código en el repositorio (paquetes dentro de la imagen del contenedor), la huella usa el mensaje del hallazgo, que incluye paquete, versión instalada y CVE.
 
 ## 3. Decisiones de seguridad del propio pipeline
