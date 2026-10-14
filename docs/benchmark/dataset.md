@@ -1,10 +1,12 @@
 # Dataset experimental (Paso 1.3)
 
-Este documento describe cómo se construye el conjunto de vulnerabilidades sobre el que se evalúa el pipeline en la Fase 5, qué fuentes se usan, qué criterios de selección se aplican y en qué punto está cada uno.
+Este documento describe cómo se construye el conjunto de vulnerabilidades sobre el que se evalúa el pipeline en la Fase 5: qué fuentes se usan, qué criterios de selección se aplican y cuántos casos supera cada uno.
+
+**Resultado:** 33 vulnerabilidades, listadas en [`benchmarks/dataset.csv`](../../benchmarks/dataset.csv). Son 30 de SecBench.js y 3 de Juice Shop, y todas tienen un hallazgo de CodeQL con traza de taint completa.
 
 ## 1. Decisión de fuentes
 
-La hoja de ruta proponía como dataset complementario Big-Vul o PrimeVul, y el OWASP Benchmark en la Fase 5. Ninguno sirve para este proyecto:
+La hoja de ruta v1 proponía como dataset complementario Big-Vul o PrimeVul, y el OWASP Benchmark en la Fase 5. Ninguno sirve para este proyecto:
 
 | Fuente | Lenguaje | Motivo del descarte |
 |---|---|---|
@@ -23,84 +25,125 @@ Se usan dos fuentes JavaScript/TypeScript que se complementan:
 
 Las clases no se solapan: Juice Shop cubre las vulnerabilidades típicas de aplicación web y SecBench.js las de librería de servidor.
 
-## 2. Juice Shop: inventario
+## 2. Criterios de selección
 
-Inventario completo: [`benchmarks/juice-shop/inventory.csv`](../../benchmarks/juice-shop/inventory.csv).
-
-La unidad de medida es la **vulnerabilidad**, no el reto. Varios retos comparten un mismo fragmento vulnerable; por ejemplo, `routes/login.ts` agrupa tres retos pero es una única inyección SQL. Contar retos inflaría la N de la Fase 5.
-
-| Paso | Resultado |
-|---|---|
-| Retos con corrección de referencia | 35 |
-| Vulnerabilidades distintas (fragmentos marcados con `vuln-code-snippet`) | 23 |
-| Candidatas (defecto de código en JS/TS) | **13** |
-| Excluidas | 10: rutas del cliente (2), diseño de preguntas de seguridad (1), prompt injection de LLM (2), secreto en IaC (1), imagen Docker (1), Solidity (3) |
-
-El secreto en Terraform (JS-19) y la imagen Docker vulnerable (JS-20) quedan fuera del conjunto de *remediación*, pero se usan como ground truth para TruffleHog y Trivy.
-
-## 3. SecBench.js: embudo de selección
-
-SecBench.js no tiene licencia, así que sus exploits **no se copian** a este repositorio: el arnés los descarga de un commit fijo (`5d362353550a8baa42bba34edd26e5fb86d41b60`). Solo se versiona el código de los paquetes npm afectados, que tienen su propia licencia y la conservan.
-
-### Criterios
+Los mismos criterios de detección (C7, C8) se aplican a las dos fuentes. Los criterios C1–C6 son propios de SecBench.js.
 
 | Criterio | Tipo | Definición |
 |---|---|---|
 | C1 | estático | El caso tiene un identificador CVE (trazabilidad con un advisory público). |
 | C2 | estático | Existe una corrección de referencia: commit de corrección o versión corregida publicada. |
 | C3 | estático | El *sink* está en el código del propio paquete (no en una dependencia) y el caso usa un solo paquete. |
-| — | muestreo | Muestra estratificada: hasta 10 casos por clase, un caso por paquete, semilla `20260930`. |
+| — | muestreo | Muestra estratificada: hasta 25 casos por clase, un caso por paquete, semilla `20260930`. |
 | C4 | dinámico | Consistencia: el paquete del caso es uno de los que OSV asocia al CVE (siguiendo los alias GHSA). |
 | C5 | dinámico | El exploit funciona contra la versión vulnerable. |
 | C6 | dinámico | El exploit **falla** contra la versión corregida, es decir, el oráculo distingue código vulnerable de código corregido. |
-| C7 | dinámico | Algún escáner del pipeline reporta el hallazgo a ±10 líneas del *sink*, con una regla etiquetada con una CWE de la clase. |
+| — | unicidad | Un caso por CVE. |
+| C3b | estático | *Sink* abordable: el *sink* se localiza en un archivo fuente legible del paquete (ni minificado ni generado). Es el requisito de la hoja de ruta de que el caso "afecte a un único archivo abordable por el LLM". |
+| C7 | escaneo | Detección: Semgrep o CodeQL reportan un hallazgo junto al *sink* (±10 líneas en SecBench.js, ±3 líneas de las marcas `vuln-line` en Juice Shop), con una regla etiquetada con una CWE de la clase. |
+| C8 | escaneo | **Traza completa**: alguno de esos hallazgos trae una traza de taint (`codeFlows`) de dos o más pasos, es decir, con fuente y *sink* distintos. |
 
-### Resultados
+**Por qué C8.** El triaje híbrido de la Fase 3 inyecta la traza fuente → propagación → *sink* en el prompt del LLM. Un hallazgo sin traza no aporta al LLM nada más que la línea del *sink*, así que no permite evaluar la arquitectura. En la práctica, C8 equivale a "CodeQL da la traza": Semgrep OSS no publica trazas sin sesión en su plataforma comercial ([`pipeline.md`, sección 4](../architecture/pipeline.md)).
 
-| Clase | Total | C1 | C1–C2 | C1–C3 | Muestra | C4–C6 (verificados) | C7 Semgrep |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| code-injection | 40 | 20 | 11 | 9 | 9 | 8 | 5 |
-| command-injection | 101 | 90 | 42 | 42 | 10 | 7 | 4 |
-| path-traversal | 170 | 81 | 12 | 12 | 10 | 5 | 1 |
-| prototype-pollution | 192 | 158 | 103 | 97 | 10 | 9 | 3 |
-| redos | 97 | 59 | 51 | 48 | 10 | 8 | 1 |
-| **Total** | **600** | **408** | **219** | **208** | **49** | **37** | **14** |
+**Por qué C7 exige la CWE.** Contar cualquier hallazgo cercano al *sink* sobreestima la detección. Por ejemplo, en `serve-here.js` y `tinyserver2` Semgrep dispara una regla de "servidor HTTP sin TLS" en la misma línea que el path traversal, sin haberlo detectado.
 
-C7 está **pendiente de CodeQL** (Paso 2.5), así que la columna de Semgrep es un límite inferior de la detección.
+C7 y C8 se calculan sobre el SARIF unificado del pipeline de CI (`unified/findings.sarif`), es decir, con las mismas herramientas y versiones que verá el agente.
+
+## 3. Juice Shop
+
+Inventario: [`benchmarks/juice-shop/inventory.csv`](../../benchmarks/juice-shop/inventory.csv). Detección: [`benchmarks/juice-shop/detection.csv`](../../benchmarks/juice-shop/detection.csv).
+
+La unidad de medida es la **vulnerabilidad**, no el reto. Varios retos comparten un mismo fragmento vulnerable; por ejemplo, `routes/login.ts` agrupa tres retos pero es una única inyección SQL. Contar retos inflaría la N de la Fase 5.
+
+| Paso | Resultado |
+|---|---:|
+| Retos con corrección de referencia | 35 |
+| Vulnerabilidades distintas (fragmentos marcados con `vuln-code-snippet`) | 23 |
+| Candidatas (defecto de código en JS/TS) | 13 |
+| C7 (detectadas) | 4 |
+| **C8 (con traza)** | **3** |
+
+Excluidas del inventario: rutas del cliente (2), diseño de preguntas de seguridad (1), prompt injection de LLM (2), secreto en IaC (1), imagen Docker (1), Solidity (3). El secreto en Terraform (JS-19) y la imagen Docker vulnerable (JS-20) quedan fuera del conjunto de *remediación*, pero se usan como ground truth para TruffleHog y Trivy.
+
+Las tres con traza son las inyecciones SQL de `login.ts` y `search.ts` y la NoSQL de `updateProductReviews.ts`. El *directory listing* de `server.ts` (JS-08) lo detecta Semgrep, pero sin traza. Las otras nueve candidatas (XSS en plantillas de Angular, control de acceso, mass assignment, política de contraseñas…) son defectos de lógica o de configuración que ninguna regla de los dos escáneres modela.
+
+## 4. SecBench.js
+
+SecBench.js no tiene licencia, así que sus exploits **no se copian** a este repositorio: el arnés los descarga de un commit fijo (`5d362353550a8baa42bba34edd26e5fb86d41b60`). Solo se versiona el código de los paquetes npm afectados, que tienen su propia licencia y la conservan.
+
+Archivos:
+- [`catalog.csv`](../../benchmarks/secbench-js/catalog.csv): C1–C3.
+- [`candidates.csv`](../../benchmarks/secbench-js/candidates.csv): la muestra.
+- [`verification.csv`](../../benchmarks/secbench-js/verification.csv): C4–C6.
+- [`excluded.csv`](../../benchmarks/secbench-js/excluded.csv): unicidad y C3b.
+- [`detection.csv`](../../benchmarks/secbench-js/detection.csv): C7–C8.
+- [`manifest.json`](../../benchmarks/secbench-js/manifest.json): los casos versionados, con CVE, CWE, paquete, versiones, *sink*, comando del exploit y resultado de C7/C8.
+
+### Embudo
+
+| Clase | Total | C1 | C1–C2 | C1–C3 | Muestra | C4–C6 | Unicidad + C3b | C7 | **C8** |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| code-injection | 40 | 20 | 11 | 9 | 9 | 8 | 7 | 5 | **2** |
+| command-injection | 101 | 90 | 42 | 42 | 25 | 15 | 14 | 13 | **12** |
+| path-traversal | 170 | 81 | 12 | 12 | 12 | 5 | 5 | 3 | **3** |
+| prototype-pollution | 192 | 158 | 103 | 97 | 25 | 20 | 17 | 10 | **7** |
+| redos | 97 | 59 | 51 | 48 | 25 | 18 | 15 | 8 | **6** |
+| **Total** | **600** | **408** | **219** | **208** | **96** | **66** | **58** | **39** | **30** |
+
+En code-injection y path-traversal la muestra agota los casos elegibles (9 y 12 paquetes), así que esas clases no pueden crecer más.
+
+### Ampliación de la muestra
+
+La primera versión del dataset usaba 10 casos por clase (49 candidatos, 37 verificados). Al exigir C8, solo quedaban 20 vulnerabilidades en total, por debajo de las 30 necesarias para la comparación global de la Fase 5. La muestra se amplió a 25 por clase con la misma semilla.
+
+El script de selección baraja cada clase completa antes de recortarla, así que la muestra ampliada **contiene a la original**: no se ha vuelto a sortear ni se ha elegido qué casos añadir. Los exploits de los 49 casos originales no se repitieron (`secbench_verify.py --reuse`).
 
 ### Por qué se descartan casos en C4–C6
 
-Los 12 candidatos descartados documentan problemas de calidad del propio SecBench.js, lo que es relevante para discutir la validez del benchmark:
+Los 30 candidatos descartados documentan problemas de calidad del propio SecBench.js, lo que es relevante para discutir la validez del benchmark:
 
-| Motivo | Casos |
+| Motivo | N | Casos |
+|---|---:|---|
+| Caso mal etiquetado: el CVE corresponde a otro paquete (OSV) | 11 | `alfred-workflow-nodejs`, `command-exists`, `diskstats`, `samsung-remote`, `scp`, `strider-git`, `vboxmanage.js`, `connie`, `millisecond`, `ms`, `prompts` |
+| La versión corregida declarada sigue siendo explotable | 6 | `hostr`, `deepref`, `react-native`, `jspdf`, `ws`, `lodash` (su "versión corregida", 4.17.5, es anterior a la vulnerable, 4.17.15) |
+| Sin versión corregida publicada (C6 no verificable) | 4 | `im-resize`, `macfromip`, `js-data`, `html-parse-stringify2` |
+| La "versión corregida" es la misma que la vulnerable | 3 | `json-ptr` (code-injection), `gm`, `mcstatic` |
+| El exploit agota el tiempo de espera (servidor HTTP) | 3 | `node-simple-router`, `stattic`, `node-srv` (solo en la versión corregida) |
+| El exploit no funciona ni en la versión vulnerable | 2 | `glance`, `multi-ini` |
+| La versión corregida no se puede instalar | 1 | `servey` |
+
+### Unicidad y C3b
+
+| Caso | Motivo |
 |---|---|
-| Caso mal etiquetado: el CVE corresponde a otro paquete (detectado con OSV) | `redos/ms_0.7.0` (CVE de `forms`), `command-injection/strider-git_1.0.3` (CVE de `im-metadata`) |
-| La "versión corregida" de los metadatos es la misma que la vulnerable | `json-ptr`, `gm`, `mcstatic` |
-| La versión corregida declarada sigue siendo explotable | `hostr`, `deepref`, `react-native` |
-| Sin versión corregida publicada (C6 no verificable) | `macfromip` |
-| El exploit agota el tiempo de espera (servidor HTTP) | `node-simple-router`, `node-srv` (solo en la versión corregida), `stattic` |
+| `command-injection/hot-formula-parser` | Mismo CVE (CVE-2020-6836) que el caso de code-injection del mismo paquete |
+| `code-injection/hot-formula-parser` | El *sink* está en un parser generado por jison (líneas de 5.243 caracteres) |
+| `prototype-pollution/jointjs` | El *sink* está en `dist/joint.min.js` (minificado). Además, el paquete ocupa 88 MB |
+| `redos/html-parse-stringify` | El *sink* está en un bundle de `dist/` (líneas de 2.088 caracteres) |
+| `prototype-pollution/sds` | Metadato del *sink* mal formado (`js:34`) |
+| `prototype-pollution/set-or-get`, `redos/semver-regex` | El *sink* apunta a archivos internos de Jest (`build/utils.js`, `jasmineAsyncInstall.js`), no del paquete |
+| `redos/three` | `three.js:6333` no existe en el paquete publicado (26 MB) |
 
-### Por qué se endurece C7 con la CWE
+Los casos excluidos no se versionan. Algunas rutas del *sink* son solo el nombre del archivo (`marked.js` en lugar de `lib/marked.js`); se resuelven por nombre cuando no hay ambigüedad.
 
-Contar cualquier hallazgo cercano al *sink* sobreestima la detección. Por ejemplo, en `serve-here.js` y `tinyserver2` Semgrep dispara una regla de "servidor HTTP sin TLS" en la misma línea que el path traversal, sin haberlo detectado. Con el criterio por CWE, la detección de Semgrep baja de 17 a 14 casos.
+## 5. Dataset final
 
-### Anomalías de los metadatos del *sink*
+[`benchmarks/dataset.csv`](../../benchmarks/dataset.csv): una fila por vulnerabilidad, con fuente, clase, CWE, CVE, archivo y línea del *sink*.
 
-- Algunas rutas del *sink* son solo el nombre del archivo (`marked.js` en lugar de `lib/marked.js`). Se resuelven por nombre cuando no hay ambigüedad.
-- `prototype-pollution/sds_3.2.0` tiene un *sink* mal formado (`js:34:13`) que no identifica un archivo. Se mantiene en el conjunto porque su oráculo es válido, pero no puede evaluarse con C7 por localización.
-- 4 paquetes (`dset`, `ajv`, `hot-formula-parser`, `ua-parser-js`) publican código en `dist/`, que el `.gitignore` de la raíz ignoraba. En `dset` el *sink* solo existe ahí (`dist/dset.js`). `benchmarks/secbench-js/cases/.gitignore` anula esa regla para que el código de los paquetes se versione completo.
+| Fuente | Clase | N |
+|---|---|---:|
+| SecBench.js | command-injection | 12 |
+| SecBench.js | prototype-pollution | 7 |
+| SecBench.js | redos | 6 |
+| SecBench.js | path-traversal | 3 |
+| SecBench.js | code-injection | 2 |
+| Juice Shop | sql-injection | 2 |
+| Juice Shop | nosql-injection | 1 |
+| **Total** | 7 clases | **33** |
 
-## 4. Tamaño resultante
+El objetivo de la hoja de ruta era de 30 a 50 vulnerabilidades.
 
-| Subconjunto | Candidatos | Detectados por Semgrep | Pendiente |
-|---|---:|---:|---|
-| Juice Shop | 13 | — | Detección con Semgrep y CodeQL (Paso 2.5) |
-| SecBench.js | 37 | 14 | Detección con CodeQL (Paso 2.5) |
-| **Total** | **50** | | |
-
-El objetivo de la Fase 5 son 30–50 vulnerabilidades. El conjunto final serán los candidatos que cumplan C7 con Semgrep o CodeQL.
-
-## 5. Reproducción
+## 6. Reproducción
 
 Requisitos: Python 3.11+, Docker, Node/npm y el repositorio de SecBench.js en local (para el catálogo).
 
@@ -110,18 +153,24 @@ git clone https://github.com/cristianstaicu/SecBench.js /tmp/secbench
 git -C /tmp/secbench checkout 5d362353550a8baa42bba34edd26e5fb86d41b60
 python scripts/benchmarks/secbench_catalog.py /tmp/secbench benchmarks/secbench-js/catalog.csv
 
-# 2. Muestra estratificada (semilla fija)
-python scripts/benchmarks/secbench_select.py benchmarks/secbench-js/catalog.csv benchmarks/secbench-js/candidates.csv
+# 2. Muestra estratificada (25 por clase, semilla fija)
+python scripts/benchmarks/secbench_select.py benchmarks/secbench-js/catalog.csv benchmarks/secbench-js/candidates.csv 25
 
 # 3. Criterios C4–C6 (OSV + exploits en Docker)
 docker build -t tfm/secbench-harness benchmarks/secbench-js/harness
 python scripts/benchmarks/secbench_verify.py benchmarks/secbench-js/candidates.csv benchmarks/secbench-js/verification.csv
 
-# 4. Código fuente de los casos verificados
+# 4. Unicidad, C3b y código fuente de los casos
 python scripts/benchmarks/secbench_materialize.py benchmarks/secbench-js/verification.csv benchmarks/secbench-js/cases
 
-# 5. C7: cruzar los SARIF de los escáneres con los sinks
-python scripts/benchmarks/secbench_detect.py benchmarks/secbench-js/cases benchmarks/secbench-js/detection-semgrep.csv semgrep=semgrep.sarif
+# 5. C7–C8 sobre el SARIF unificado del pipeline (artefacto "unified-findings" de GitHub Actions)
+python scripts/benchmarks/secbench_detect.py benchmarks/secbench-js/cases benchmarks/secbench-js/detection.csv \
+  "semgrep=findings.sarif#semgrep" "codeql=findings.sarif#codeql"
+python scripts/benchmarks/juiceshop_detect.py benchmarks/juice-shop/inventory.csv benchmarks/juice-shop/detection.csv \
+  "semgrep=findings.sarif#semgrep" "codeql=findings.sarif#codeql"
+
+# 6. Manifiesto y dataset final
+python scripts/benchmarks/build_manifest.py
 ```
 
 En Windows, el repositorio de SecBench.js no se puede extraer directamente, porque contiene una ruta que termina en punto (`incubator/ioredis_4.0.0.`). Se puede extraer solo lo necesario con `git -c core.protectNTFS=false archive HEAD code-injection command-injection path-traversal prototype-pollution redos`.
@@ -130,8 +179,11 @@ Notas del entorno:
 - La imagen del arnés usa `node:16-bookworm`: SecBench.js se validó con Node 16, y la base `bullseye` de los Dockerfiles originales ya no tiene soporte (su repositorio de seguridad devuelve 404).
 - No se usan los Dockerfiles por caso que trae SecBench.js: se generaron automáticamente y algunos clonan el repositorio equivocado (p. ej., `ms_0.7.0` clona `caolan/forms`).
 
-## 6. Limitaciones
+## 7. Limitaciones
 
-- **Regresión funcional en SecBench.js**: los paquetes de npm no suelen incluir sus tests, así que el oráculo de seguridad (el exploit) no comprueba que el parche mantenga la funcionalidad. Hay que resolverlo antes de la Fase 4. Opciones: tests del repositorio original en la etiqueta de la versión, o pruebas diferenciales contra la versión corregida.
-- **Muestreo**: una muestra estratificada de 10 casos por clase no es representativa de la distribución original de SecBench.js, que está dominada por prototype pollution. Es una decisión deliberada para cubrir todas las clases en el análisis por categoría de la Fase 5.
-- **Path traversal** queda con solo 5 casos verificados, porque la clase tiene pocos casos con corrección de referencia (12 de 170).
+- **Clases desequilibradas.** Command-injection aporta 12 casos y code-injection solo 2. El análisis por categoría de la Fase 5 es exploratorio. Para la comparación global entre estrategias de prompting se usan los 33 casos con medidas repetidas.
+- **Sesgo de selección hacia lo que CodeQL modela.** C8 deja dentro solo las vulnerabilidades que CodeQL sabe seguir. En las librerías, eso significa consultas que tratan los parámetros de las funciones exportadas como fuente (`js/shell-command-constructed-from-input`, `js/prototype-pollution-utility`, `js/unsafe-code-construction`…). Los resultados de la Fase 5 describen el rendimiento del sistema **sobre vulnerabilidades con traza**, no sobre cualquier vulnerabilidad. Es coherente con la pregunta de investigación (el valor de la traza), pero debe decirse así en la memoria.
+- **Juice Shop aporta solo 3 casos.** Son las vulnerabilidades más documentadas públicamente (inyecciones SQL de un benchmark conocido desde 2014), justo las que más riesgo de memorización tienen. La prueba de control de memorización (Paso 5.3) tendrá poco poder sobre Juice Shop. Los 30 casos de SecBench.js son paquetes npm poco conocidos.
+- **Regresión funcional en SecBench.js.** Los paquetes de npm no suelen incluir sus tests, así que el oráculo de seguridad (el exploit) no comprueba que el parche mantenga la funcionalidad. Hay que resolverlo antes de la Fase 4. Opciones: tests del repositorio original en la etiqueta de la versión, o pruebas diferenciales contra la versión corregida.
+- **Path traversal** queda con 3 casos, porque la clase tiene muy pocos casos con corrección de referencia (12 de 170).
+- **Muestreo.** Una muestra estratificada no es representativa de la distribución original de SecBench.js, dominada por prototype pollution. Es una decisión deliberada para cubrir todas las clases.
