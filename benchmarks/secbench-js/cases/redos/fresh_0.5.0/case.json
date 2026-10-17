@@ -1,0 +1,33 @@
+{
+  "case_id": "redos/fresh_0.5.0",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "redos/fresh_0.5.0/fresh.test.js"
+  },
+  "vuln_class": "redos",
+  "cwe": "CWE-1333",
+  "cve": "CVE-2017-16119",
+  "package": "fresh",
+  "vulnerable_version": "0.5.0",
+  "fixed_version": "0.5.2",
+  "fix_commit": "https://github.com/jshttp/fresh/commit/21a0f0c2a5f447e0d40bc16be0c23fa98a7b46ec",
+  "sink": {
+    "file": "src/index.js",
+    "line": 61,
+    "line_verified": true,
+    "upstream": "index.js:61"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "redos",
+      "fresh_0.5.0",
+      "fresh"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

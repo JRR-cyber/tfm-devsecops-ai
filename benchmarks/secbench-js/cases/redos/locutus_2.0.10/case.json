@@ -1,0 +1,33 @@
+{
+  "case_id": "redos/locutus_2.0.10",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "redos/locutus_2.0.10/locutus.test.js"
+  },
+  "vuln_class": "redos",
+  "cwe": "CWE-1333",
+  "cve": "CVE-2021-23392",
+  "package": "locutus",
+  "vulnerable_version": "2.0.10",
+  "fixed_version": "2.0.15",
+  "fix_commit": "https://github.com/locutusjs/locutus/commit/eb863321990e7e5514aa14f68b8d9978ece9e65e",
+  "sink": {
+    "file": "src/php/network/inet_pton.js",
+    "line": 30,
+    "line_verified": true,
+    "upstream": "inet_pton.js:30"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "redos",
+      "locutus_2.0.10",
+      "locutus"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

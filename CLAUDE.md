@@ -24,10 +24,10 @@ Some top-level directories are still placeholders for later phases:
 - `infra/k8s/` — Kubernetes manifests for deployment. Empty.
 - `scripts/pipeline/` — CI helpers: `unify_results.py` (Phase 2.6 unified artifact) and TruffleHog's exclude list.
 - `docs/architecture/` — architecture documentation (`pipeline.md`).
-- `docs/benchmark/dataset.md` — methodology of the experimental dataset (sources, selection criteria C1–C7, funnel numbers, limitations). Keep it in sync when the dataset changes.
+- `docs/benchmark/dataset.md` — methodology of the experimental dataset (sources, selection criteria C1–C8, funnel numbers, limitations). The final evaluation set is `benchmarks/dataset.csv` (cases with a complete CodeQL taint trace). Keep both in sync when the dataset changes.
 - `src/app/` — the **deliberately vulnerable benchmark target** the pipeline is evaluated against.
 - `benchmarks/` — experimental dataset data (see `benchmarks/README.md`): Juice Shop inventory and the SecBench.js subset. `benchmarks/secbench-js/cases/*/*/src/` is vendored, intentionally vulnerable npm package code (same rules as Juice Shop: don't fix, excluded from pre-commit). SecBench.js has no license, so its exploits are **not** vendored — the Docker harness in `benchmarks/secbench-js/harness/` fetches them from a pinned commit.
-- `scripts/benchmarks/` — Python scripts that build the dataset (catalog → select → verify → materialize → detect). Each script documents its usage in its docstring.
+- `scripts/benchmarks/` — Python scripts that build the dataset (catalog → select → verify → materialize → detect → build_manifest; `juiceshop_detect.py` for Juice Shop). C7/C8 are computed from the pipeline's unified SARIF artifact. Each script documents its usage in its docstring.
 
 ### The benchmark target (`src/app/`)
 

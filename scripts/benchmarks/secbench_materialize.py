@@ -5,6 +5,17 @@ case's vulnerable package is extracted here exactly as published on npm
 (`npm pack`), together with a manifest describing the case. The package's
 own license file travels with its source.
 
+Cases are skipped (and listed in ``excluded.csv`` next to the verification
+CSV) when they:
+
+- repeat a CVE already materialized (the same vulnerability filed under two
+  classes), or
+- fail C3b, "tractable sink": the sink must resolve to a readable source file
+  of the package. Unresolvable sinks (upstream metadata pointing at test
+  framework files) cannot be checked for C7, and minified or generated code
+  (e.g. a jison parser) is not something the LLM can, or should, patch. Such packages are not vendored at all, which
+  also keeps multi-megabyte bundles (jointjs, three) out of the repository.
+
 Usage:
     python scripts/benchmarks/secbench_materialize.py <verification_csv> <cases_dir>
 """
@@ -20,6 +31,8 @@ from pathlib import Path
 
 SECBENCH_REPO = "https://github.com/cristianstaicu/SecBench.js"
 SECBENCH_COMMIT = "5d362353550a8baa42bba34edd26e5fb86d41b60"
+# A line this long only appears in minified/bundled code.
+MINIFIED_LINE_CHARS = 1000
 
 
 def npm_pack(spec: str, dest: Path) -> Path:
@@ -49,6 +62,18 @@ def resolve_sink(src: Path, sink_file: str, sink_line: int) -> dict:
             "upstream": f"{sink_file}:{sink_line}"}
 
 
+def untractable_reason(src: Path, sink: dict) -> str | None:
+    """Why a resolved sink fails C3b, or None if the sink file is patchable."""
+    if sink["file"] is None:
+        return f"C3b: sink not found in the package (upstream {sink['upstream']})"
+    path = src.parent / sink["file"]
+    text = path.read_text(encoding="utf-8", errors="replace")
+    longest = max((len(line) for line in text.splitlines()), default=0)
+    if path.name.endswith(".min.js") or longest > MINIFIED_LINE_CHARS:
+        return f"C3b: sink in minified/generated code ({sink['file']}, longest line {longest} chars)"
+    return None
+
+
 def main() -> None:
     if len(sys.argv) != 3:
         sys.exit(__doc__)
@@ -56,6 +81,16 @@ def main() -> None:
 
     with verification.open(encoding="utf-8") as fh:
         rows = [r for r in csv.DictReader(fh) if r["verified"] == "True"]
+    # One case per CVE: SecBench.js sometimes files the same vulnerability under
+    # two classes (hot-formula-parser, CVE-2020-6836). Keep the first in class order.
+    seen_cves, unique, excluded = set(), [], []
+    for row in rows:
+        if row["cve"] in seen_cves:
+            excluded.append({"case_id": row["case_id"], "reason": f"duplicate CVE {row['cve']}"})
+            continue
+        seen_cves.add(row["cve"])
+        unique.append(row)
+    rows = unique
     catalog_path = verification.parent / "catalog.csv"
     with catalog_path.open(encoding="utf-8") as fh:
         catalog = {r["case_id"]: r for r in csv.DictReader(fh)}
@@ -91,11 +126,24 @@ def main() -> None:
                        "vulnerable_run": row["vulnerable_run"],
                        "fixed_run": row["fixed_run"]},
         }
-        (target / "case.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        reason = untractable_reason(target / "src", manifest["sink"])
+        if reason:
+            shutil.rmtree(target)
+            excluded.append({"case_id": row["case_id"], "reason": reason})
+            print(f"{row['case_id']:<50} excluded: {reason}")
+            continue
+        (target / "case.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8",
+                                          newline="\n")
         size_kb = sum(f.stat().st_size for f in (target / "src").rglob("*") if f.is_file()) // 1024
         sink = manifest["sink"]
         print(f"{row['case_id']:<50} {size_kb:>6} KB  sink={sink['file']}:{sink['line']}"
               f"{'' if sink['line_verified'] else '  (line not verified)'}")
+
+    with (verification.parent / "excluded.csv").open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=["case_id", "reason"], lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(excluded)
+    print(f"excluded={len(excluded)} (see {verification.parent / 'excluded.csv'})")
 
 
 if __name__ == "__main__":

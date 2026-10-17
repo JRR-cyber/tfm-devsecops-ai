@@ -1,0 +1,33 @@
+{
+  "case_id": "prototype-pollution/set-object-value_0.0.5",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "prototype-pollution/set-object-value_0.0.5/set-object-value.test.js"
+  },
+  "vuln_class": "prototype-pollution",
+  "cwe": "CWE-1321",
+  "cve": "CVE-2020-28281",
+  "package": "set-object-value",
+  "vulnerable_version": "0.0.5",
+  "fixed_version": "0.0.6",
+  "fix_commit": "https://github.com/react-atomic/react-atomic-organism/commit/c8ec63388f7785078cb27275b56ed955ffd3db6c",
+  "sink": {
+    "file": "src/build/cjs/src/index.js",
+    "line": 24,
+    "line_verified": true,
+    "upstream": "build/cjs/src/index.js:24"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "prototype-pollution",
+      "set-object-value_0.0.5",
+      "set-object-value"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

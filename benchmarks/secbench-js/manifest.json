@@ -1,0 +1,1514 @@
+{
+  "source": "SecBench.js",
+  "harness": "benchmarks/secbench-js/harness",
+  "cases": [
+    {
+      "case_id": "code-injection/djv_2.0.0",
+      "vuln_class": "code-injection",
+      "cwe": "CWE-94",
+      "cve": "CVE-2020-28464",
+      "package": "djv",
+      "vulnerable_version": "2.0.0",
+      "fixed_version": "2.1.4",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/code-injection/djv_2.0.0/src/lib/utils/template.js",
+        "line": 110
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "code-injection",
+        "djv_2.0.0",
+        "djv",
+        "2.0.0"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "code-injection/node-rules_3.0.0",
+      "vuln_class": "code-injection",
+      "cwe": "CWE-94",
+      "cve": "CVE-2020-7609",
+      "package": "node-rules",
+      "vulnerable_version": "3.0.0",
+      "fixed_version": "5.0.0",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/code-injection/node-rules_3.0.0/src/lib/node-rules.js",
+        "line": 245
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "code-injection",
+        "node-rules_3.0.0",
+        "node-rules",
+        "3.0.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": false
+    },
+    {
+      "case_id": "code-injection/pixl-class_1.0.0",
+      "vuln_class": "code-injection",
+      "cwe": "CWE-94",
+      "cve": "CVE-2020-7640",
+      "package": "pixl-class",
+      "vulnerable_version": "1.0.0",
+      "fixed_version": "1.0.3",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/code-injection/pixl-class_1.0.0/src/class.js",
+        "line": 26
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "code-injection",
+        "pixl-class_1.0.0",
+        "pixl-class",
+        "1.0.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "code-injection/reduce-css-calc_1.2.0",
+      "vuln_class": "code-injection",
+      "cwe": "CWE-94",
+      "cve": "CVE-2016-10548",
+      "package": "reduce-css-calc",
+      "vulnerable_version": "1.2.0",
+      "fixed_version": "1.2.5",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/code-injection/reduce-css-calc_1.2.0/src/index.js",
+        "line": 73
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "code-injection",
+        "reduce-css-calc_1.2.0",
+        "reduce-css-calc",
+        "1.2.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": false
+    },
+    {
+      "case_id": "code-injection/safer-eval_1.3.1",
+      "vuln_class": "code-injection",
+      "cwe": "CWE-94",
+      "cve": "CVE-2019-10759",
+      "package": "safer-eval",
+      "vulnerable_version": "1.3.1",
+      "fixed_version": "1.3.4",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/code-injection/safer-eval_1.3.1/src/lib/index.js",
+        "line": 60
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "code-injection",
+        "safer-eval_1.3.1",
+        "safer-eval",
+        "1.3.1"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "code-injection/thenify_3.3.0",
+      "vuln_class": "code-injection",
+      "cwe": "CWE-94",
+      "cve": "CVE-2020-7677",
+      "package": "thenify",
+      "vulnerable_version": "3.3.0",
+      "fixed_version": "3.3.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/code-injection/thenify_3.3.0/src/index.js",
+        "line": 17
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "code-injection",
+        "thenify_3.3.0",
+        "thenify",
+        "3.3.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": false
+    },
+    {
+      "case_id": "code-injection/underscore_1.13.0-0",
+      "vuln_class": "code-injection",
+      "cwe": "CWE-94",
+      "cve": "CVE-2021-23358",
+      "package": "underscore",
+      "vulnerable_version": "1.13.0-0",
+      "fixed_version": "1.12.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/code-injection/underscore_1.13.0-0/src/modules/template.js",
+        "line": 71
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "code-injection",
+        "underscore_1.13.0-0",
+        "underscore",
+        "1.13.0-0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "command-injection/apex-publish-static-files_2.0.0",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2018-16462",
+      "package": "apex-publish-static-files",
+      "vulnerable_version": "2.0.0",
+      "fixed_version": "2.0.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/apex-publish-static-files_2.0.0/src/index.js",
+        "line": 54
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "apex-publish-static-files_2.0.0",
+        "apex-publish-static-files",
+        "2.0.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "command-injection/async-git_1.13.1",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2020-28490",
+      "package": "async-git",
+      "vulnerable_version": "1.13.1",
+      "fixed_version": "1.13.2",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/async-git_1.13.1/src/lib/reset/index.js",
+        "line": 11
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "async-git_1.13.1",
+        "async-git",
+        "1.13.1"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "command-injection/bestzip_2.1.6",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2020-7730",
+      "package": "bestzip",
+      "vulnerable_version": "2.1.6",
+      "fixed_version": "2.1.7",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/bestzip_2.1.6/src/lib/bestzip.js",
+        "line": 27
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "bestzip_2.1.6",
+        "bestzip",
+        "2.1.6"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "command-injection/clamscan_1.2.0",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2020-7613",
+      "package": "clamscan",
+      "vulnerable_version": "1.2.0",
+      "fixed_version": "1.3.0",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/clamscan_1.2.0/src/index.js",
+        "line": 495
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "clamscan_1.2.0",
+        "clamscan",
+        "1.2.0"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "command-injection/connection-tester_0.2.0",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2020-7781",
+      "package": "connection-tester",
+      "vulnerable_version": "0.2.0",
+      "fixed_version": "0.2.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/connection-tester_0.2.0/src/index.js",
+        "line": 15
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "connection-tester_0.2.0",
+        "connection-tester",
+        "0.2.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "command-injection/diskusage-ng_0.2.6",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2020-7631",
+      "package": "diskusage-ng",
+      "vulnerable_version": "0.2.6",
+      "fixed_version": "1.0.0",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/diskusage-ng_0.2.6/src/lib/posix.js",
+        "line": 11
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "diskusage-ng_0.2.6",
+        "diskusage-ng",
+        "0.2.6"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "command-injection/dns-sync_0.1.0",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2014-9682",
+      "package": "dns-sync",
+      "vulnerable_version": "0.1.0",
+      "fixed_version": "0.1.3",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/dns-sync_0.1.0/src/lib/dns-sync.js",
+        "line": 21
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "dns-sync_0.1.0",
+        "dns-sync",
+        "0.1.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "command-injection/giting_0.0.7",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2019-10802",
+      "package": "giting",
+      "vulnerable_version": "0.0.7",
+      "fixed_version": "0.0.8",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/giting_0.0.7/src/lib/git.js",
+        "line": 223
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "giting_0.0.7",
+        "giting",
+        "0.0.7"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "command-injection/macaddress_0.2.8",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2018-13797",
+      "package": "macaddress",
+      "vulnerable_version": "0.2.8",
+      "fixed_version": "0.2.9",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/macaddress_0.2.8/src/lib/unix.js",
+        "line": 4
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "macaddress_0.2.8",
+        "macaddress",
+        "0.2.8"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "command-injection/pdfinfojs_0.3.6",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2018-3746",
+      "package": "pdfinfojs",
+      "vulnerable_version": "0.3.6",
+      "fixed_version": "0.4.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/pdfinfojs_0.3.6/src/lib/pdfinfo.js",
+        "line": 47
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "pdfinfojs_0.3.6",
+        "pdfinfojs",
+        "0.3.6"
+      ],
+      "c7_detected": true,
+      "c8_trace": false
+    },
+    {
+      "case_id": "command-injection/portprocesses_1.0.4",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2021-23348",
+      "package": "portprocesses",
+      "vulnerable_version": "1.0.4",
+      "fixed_version": "1.0.5",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/portprocesses_1.0.4/src/exec.js",
+        "line": 5
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "portprocesses_1.0.4",
+        "portprocesses",
+        "1.0.4"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "command-injection/react-dev-utils_11.0.0",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2021-24033",
+      "package": "react-dev-utils",
+      "vulnerable_version": "11.0.0",
+      "fixed_version": "11.0.4",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/react-dev-utils_11.0.0/src/getProcessForPort.js",
+        "line": 28
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "react-dev-utils_11.0.0",
+        "react-dev-utils",
+        "11.0.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "command-injection/thi.ng-egf_0.3.0",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2021-21412",
+      "package": "@thi.ng/egf",
+      "vulnerable_version": "0.3.0",
+      "fixed_version": "0.4.0",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/thi.ng-egf_0.3.0/src/lib/index.js",
+        "line": 157
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "thi.ng-egf_0.3.0",
+        "@thi.ng/egf",
+        "0.3.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "command-injection/whereis_0.4.0",
+      "vuln_class": "command-injection",
+      "cwe": "CWE-78",
+      "cve": "CVE-2018-3772",
+      "package": "whereis",
+      "vulnerable_version": "0.4.0",
+      "fixed_version": "0.4.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/command-injection/whereis_0.4.0/src/index.js",
+        "line": 4
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "command-injection",
+        "whereis_0.4.0",
+        "whereis",
+        "0.4.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "path-traversal/crud-file-server_0.7.0",
+      "vuln_class": "path-traversal",
+      "cwe": "CWE-22",
+      "cve": "CVE-2018-3733",
+      "package": "crud-file-server",
+      "vulnerable_version": "0.7.0",
+      "fixed_version": "0.9.0",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/path-traversal/crud-file-server_0.7.0/src/crud-file-server.js",
+        "line": 170
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "path-traversal",
+        "crud-file-server_0.7.0",
+        "crud-file-server",
+        "0.7.0"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "path-traversal/http-live-simulator_1.0.0",
+      "vuln_class": "path-traversal",
+      "cwe": "CWE-22",
+      "cve": "CVE-2018-16479",
+      "package": "http-live-simulator",
+      "vulnerable_version": "1.0.0",
+      "fixed_version": "1.0.7",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/path-traversal/http-live-simulator_1.0.0/src/bin/http-live",
+        "line": 55
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "path-traversal",
+        "http-live-simulator_1.0.0",
+        "http-live-simulator",
+        "1.0.0"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "path-traversal/m-server_1.4.0",
+      "vuln_class": "path-traversal",
+      "cwe": "CWE-22",
+      "cve": "CVE-2018-16485",
+      "package": "m-server",
+      "vulnerable_version": "1.4.0",
+      "fixed_version": "1.4.2",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/path-traversal/m-server_1.4.0/src/lib/index.js",
+        "line": 14
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "path-traversal",
+        "m-server_1.4.0",
+        "m-server",
+        "1.4.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "path-traversal/serve-here.js_1.1.0",
+      "vuln_class": "path-traversal",
+      "cwe": "CWE-22",
+      "cve": "CVE-2019-5444",
+      "package": "serve-here.js",
+      "vulnerable_version": "1.1.0",
+      "fixed_version": "1.2.0",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/path-traversal/serve-here.js_1.1.0/src/source/server.js",
+        "line": 27
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "path-traversal",
+        "serve-here.js_1.1.0",
+        "serve-here.js",
+        "1.1.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "path-traversal/tinyserver2_0.5.2",
+      "vuln_class": "path-traversal",
+      "cwe": "CWE-22",
+      "cve": "CVE-2017-16085",
+      "package": "tinyserver2",
+      "vulnerable_version": "0.5.2",
+      "fixed_version": "0.6.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/path-traversal/tinyserver2_0.5.2/src/tinyserver.js",
+        "line": 27
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "path-traversal",
+        "tinyserver2_0.5.2",
+        "tinyserver2",
+        "0.5.2"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "prototype-pollution/bmoor_0.8.11",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2020-7736",
+      "package": "bmoor",
+      "vulnerable_version": "0.8.11",
+      "fixed_version": "0.8.12",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/bmoor_0.8.11/src/src/core.js",
+        "line": 194
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "bmoor_0.8.11",
+        "bmoor",
+        "0.8.11"
+      ],
+      "c7_detected": true,
+      "c8_trace": false
+    },
+    {
+      "case_id": "prototype-pollution/changeset_0.1.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2021-25915",
+      "package": "changeset",
+      "vulnerable_version": "0.1.0",
+      "fixed_version": "0.2.6",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/changeset_0.1.0/src/index.js",
+        "line": 81
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "changeset_0.1.0",
+        "changeset",
+        "0.1.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": false
+    },
+    {
+      "case_id": "prototype-pollution/dot-prop_2.0.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2020-8116",
+      "package": "dot-prop",
+      "vulnerable_version": "2.0.0",
+      "fixed_version": "5.1.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/dot-prop_2.0.0/src/index.js",
+        "line": 32
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "dot-prop_2.0.0",
+        "dot-prop",
+        "2.0.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": false
+    },
+    {
+      "case_id": "prototype-pollution/dset_1.0.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2020-28277",
+      "package": "dset",
+      "vulnerable_version": "1.0.0",
+      "fixed_version": "2.1.0",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/dset_1.0.0/src/dist/dset.js",
+        "line": 6
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "dset_1.0.0",
+        "dset",
+        "1.0.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "prototype-pollution/getobject_0.1.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2020-28282",
+      "package": "getobject",
+      "vulnerable_version": "0.1.0",
+      "fixed_version": "1.0.0",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/getobject_0.1.0/src/lib/getobject.js",
+        "line": 48
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "getobject_0.1.0",
+        "getobject",
+        "0.1.0"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "prototype-pollution/hoek_5.0.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2018-3728",
+      "package": "hoek",
+      "vulnerable_version": "5.0.0",
+      "fixed_version": "5.0.3",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/hoek_5.0.0/src/lib/index.js",
+        "line": 137
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "hoek_5.0.0",
+        "hoek",
+        "5.0.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "prototype-pollution/immer_8.0.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2021-23436",
+      "package": "immer",
+      "vulnerable_version": "8.0.0",
+      "fixed_version": "9.0.6",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/immer_8.0.0/src/src/plugins/patches.ts",
+        "line": 245
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "immer_8.0.0",
+        "immer",
+        "8.0.0"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "prototype-pollution/json-ptr_1.1.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2021-23509",
+      "package": "json-ptr",
+      "vulnerable_version": "1.1.0",
+      "fixed_version": "3.0.0",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/json-ptr_1.1.0/src/index.js",
+        "line": 277
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "json-ptr_1.1.0",
+        "json-ptr",
+        "1.1.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "prototype-pollution/jsonpointer_4.0.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2021-23807",
+      "package": "jsonpointer",
+      "vulnerable_version": "4.0.0",
+      "fixed_version": "5.0.0",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/jsonpointer_4.0.0/src/jsonpointer.js",
+        "line": 43
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "jsonpointer_4.0.0",
+        "jsonpointer",
+        "4.0.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "prototype-pollution/libnested_1.5.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2020-28283",
+      "package": "libnested",
+      "vulnerable_version": "1.5.0",
+      "fixed_version": "1.5.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/libnested_1.5.0/src/index.js",
+        "line": 27
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "libnested_1.5.0",
+        "libnested",
+        "1.5.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "prototype-pollution/madlib-object-utils_0.1.6",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2020-7701",
+      "package": "madlib-object-utils",
+      "vulnerable_version": "0.1.6",
+      "fixed_version": "0.1.7",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/madlib-object-utils_0.1.6/src/lib/utils.js",
+        "line": 56
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "madlib-object-utils_0.1.6",
+        "madlib-object-utils",
+        "0.1.6"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "prototype-pollution/merge-options_1.0.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2018-3752",
+      "package": "merge-options",
+      "vulnerable_version": "1.0.0",
+      "fixed_version": "1.0.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/merge-options_1.0.0/src/index.js",
+        "line": 73
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "merge-options_1.0.0",
+        "merge-options",
+        "1.0.0"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "prototype-pollution/mout_1.0.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2020-7792",
+      "package": "mout",
+      "vulnerable_version": "1.0.0",
+      "fixed_version": "1.2.3",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/mout_1.0.0/src/object/set.js",
+        "line": 9
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "mout_1.0.0",
+        "mout",
+        "1.0.0"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "prototype-pollution/objection_2.0.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2021-3766",
+      "package": "objection",
+      "vulnerable_version": "2.0.0",
+      "fixed_version": "3.0.0-alpha.5",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/objection_2.0.0/src/lib/utils/objectUtils.js",
+        "line": 246
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "objection_2.0.0",
+        "objection",
+        "2.0.0"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "prototype-pollution/set-object-value_0.0.5",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2020-28281",
+      "package": "set-object-value",
+      "vulnerable_version": "0.0.5",
+      "fixed_version": "0.0.6",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/set-object-value_0.0.5/src/build/cjs/src/index.js",
+        "line": 24
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "set-object-value_0.0.5",
+        "set-object-value",
+        "0.0.5"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "prototype-pollution/set-value_3.0.0",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2021-23440",
+      "package": "set-value",
+      "vulnerable_version": "3.0.0",
+      "fixed_version": "4.0.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/set-value_3.0.0/src/index.js",
+        "line": 41
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "set-value_3.0.0",
+        "set-value",
+        "3.0.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "prototype-pollution/y18n_3.2.1",
+      "vuln_class": "prototype-pollution",
+      "cwe": "CWE-1321",
+      "cve": "CVE-2020-7774",
+      "package": "y18n",
+      "vulnerable_version": "3.2.1",
+      "fixed_version": "5.0.5",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/prototype-pollution/y18n_3.2.1/src/index.js",
+        "line": 156
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "prototype-pollution",
+        "y18n_3.2.1",
+        "y18n",
+        "3.2.1"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "redos/ajv_5.2.2",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2020-15366",
+      "package": "ajv",
+      "vulnerable_version": "5.2.2",
+      "fixed_version": "6.12.3",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/ajv_5.2.2/src/lib/compile/util.js",
+        "line": 143
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "ajv_5.2.2",
+        "ajv",
+        "5.2.2"
+      ],
+      "c7_detected": true,
+      "c8_trace": false
+    },
+    {
+      "case_id": "redos/brace-expansion_1.1.6",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2017-18077",
+      "package": "brace-expansion",
+      "vulnerable_version": "1.1.6",
+      "fixed_version": "1.1.7",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/brace-expansion_1.1.6/src/index.js",
+        "line": 109
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "brace-expansion_1.1.6",
+        "brace-expansion",
+        "1.1.6"
+      ],
+      "c7_detected": true,
+      "c8_trace": false
+    },
+    {
+      "case_id": "redos/color-string_1.5.4",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2021-29060",
+      "package": "color-string",
+      "vulnerable_version": "1.5.4",
+      "fixed_version": "1.5.5",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/color-string_1.5.4/src/index.js",
+        "line": 154
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "color-string_1.5.4",
+        "color-string",
+        "1.5.4"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "redos/forwarded_0.1.0",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2017-16118",
+      "package": "forwarded",
+      "vulnerable_version": "0.1.0",
+      "fixed_version": "0.1.2",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/forwarded_0.1.0/src/index.js",
+        "line": 27
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "forwarded_0.1.0",
+        "forwarded",
+        "0.1.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "redos/fresh_0.5.0",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2017-16119",
+      "package": "fresh",
+      "vulnerable_version": "0.5.0",
+      "fixed_version": "0.5.2",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/fresh_0.5.0/src/index.js",
+        "line": 61
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "fresh_0.5.0",
+        "fresh",
+        "0.5.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "redos/hosted-git-info_3.0.0",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2021-23362",
+      "package": "hosted-git-info",
+      "vulnerable_version": "3.0.0",
+      "fixed_version": "3.0.8",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/hosted-git-info_3.0.0/src/index.js",
+        "line": 44
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "hosted-git-info_3.0.0",
+        "hosted-git-info",
+        "3.0.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "redos/is-email_1.0.0",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2021-36716",
+      "package": "is-email",
+      "vulnerable_version": "1.0.0",
+      "fixed_version": "1.0.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/is-email_1.0.0/src/lib/index.js",
+        "line": 13
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "is-email_1.0.0",
+        "is-email",
+        "1.0.0"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "redos/locutus_2.0.10",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2021-23392",
+      "package": "locutus",
+      "vulnerable_version": "2.0.10",
+      "fixed_version": "2.0.15",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/locutus_2.0.10/src/php/network/inet_pton.js",
+        "line": 30
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "locutus_2.0.10",
+        "locutus",
+        "2.0.10"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "redos/marked_0.3.6",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2021-21306",
+      "package": "marked",
+      "vulnerable_version": "0.3.6",
+      "fixed_version": "2.0.0",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/marked_0.3.6/src/lib/marked.js",
+        "line": 662
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "marked_0.3.6",
+        "marked",
+        "0.3.6"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "redos/moment_2.18.1",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2017-18214",
+      "package": "moment",
+      "vulnerable_version": "2.18.1",
+      "fixed_version": "2.19.3",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/moment_2.18.1/src/moment.js",
+        "line": 2364
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "moment_2.18.1",
+        "moment",
+        "2.18.1"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "redos/no-case_2.3.1",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2017-16099",
+      "package": "no-case",
+      "vulnerable_version": "2.3.1",
+      "fixed_version": "2.3.2",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/no-case_2.3.1/src/no-case.js",
+        "line": 34
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "no-case_2.3.1",
+        "no-case",
+        "2.3.1"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "redos/printf_0.6.0",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2021-23354",
+      "package": "printf",
+      "vulnerable_version": "0.6.0",
+      "fixed_version": "0.6.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/printf_0.6.0/src/lib/printf.js",
+        "line": 14
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "printf_0.6.0",
+        "printf",
+        "0.6.0"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "redos/ssri_8.0.0",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2021-27290",
+      "package": "ssri",
+      "vulnerable_version": "8.0.0",
+      "fixed_version": "8.0.1",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/ssri_8.0.0/src/index.js",
+        "line": 123
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "ssri_8.0.0",
+        "ssri",
+        "8.0.0"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    },
+    {
+      "case_id": "redos/tough-cookie_2.3.2",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2017-15010",
+      "package": "tough-cookie",
+      "vulnerable_version": "2.3.2",
+      "fixed_version": "2.3.3",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/tough-cookie_2.3.2/src/lib/cookie.js",
+        "line": 330
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "tough-cookie_2.3.2",
+        "tough-cookie",
+        "2.3.2"
+      ],
+      "c7_detected": true,
+      "c8_trace": true
+    },
+    {
+      "case_id": "redos/ua-parser-js_0.7.22",
+      "vuln_class": "redos",
+      "cwe": "CWE-1333",
+      "cve": "CVE-2021-27292",
+      "package": "ua-parser-js",
+      "vulnerable_version": "0.7.22",
+      "fixed_version": "0.7.24",
+      "sink": {
+        "file": "benchmarks/secbench-js/cases/redos/ua-parser-js_0.7.22/src/src/ua-parser.js",
+        "line": 98
+      },
+      "exploit_command": [
+        "docker",
+        "run",
+        "--rm",
+        "tfm/secbench-harness",
+        "run_case",
+        "redos",
+        "ua-parser-js_0.7.22",
+        "ua-parser-js",
+        "0.7.22"
+      ],
+      "c7_detected": false,
+      "c8_trace": false
+    }
+  ]
+}

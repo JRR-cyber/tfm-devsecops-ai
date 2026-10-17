@@ -1,0 +1,33 @@
+{
+  "case_id": "command-injection/whereis_0.4.0",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "command-injection/whereis_0.4.0/whereis.test.js"
+  },
+  "vuln_class": "command-injection",
+  "cwe": "CWE-78",
+  "cve": "CVE-2018-3772",
+  "package": "whereis",
+  "vulnerable_version": "0.4.0",
+  "fixed_version": "0.4.1",
+  "fix_commit": "https://github.com/vvo/node-whereis/commit/0f64e3780235004fb6e43bfd153ea3e0e210ee2b",
+  "sink": {
+    "file": "src/index.js",
+    "line": 4,
+    "line_verified": true,
+    "upstream": "index.js:4"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "command-injection",
+      "whereis_0.4.0",
+      "whereis"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

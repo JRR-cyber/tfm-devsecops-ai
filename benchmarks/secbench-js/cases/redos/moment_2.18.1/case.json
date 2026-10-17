@@ -1,0 +1,33 @@
+{
+  "case_id": "redos/moment_2.18.1",
+  "source": {
+    "dataset": "SecBench.js",
+    "repo": "https://github.com/cristianstaicu/SecBench.js",
+    "commit": "5d362353550a8baa42bba34edd26e5fb86d41b60",
+    "exploit": "redos/moment_2.18.1/moment.test.js"
+  },
+  "vuln_class": "redos",
+  "cwe": "CWE-1333",
+  "cve": "CVE-2017-18214",
+  "package": "moment",
+  "vulnerable_version": "2.18.1",
+  "fixed_version": "2.19.3",
+  "fix_commit": null,
+  "sink": {
+    "file": "src/moment.js",
+    "line": 2364,
+    "line_verified": true,
+    "upstream": "moment.js:2364"
+  },
+  "oracle": {
+    "harness": "benchmarks/secbench-js/harness",
+    "command": [
+      "run_case",
+      "redos",
+      "moment_2.18.1",
+      "moment"
+    ],
+    "vulnerable_run": "exploited",
+    "fixed_run": "not_exploited"
+  }
+}

@@ -1,0 +1,14 @@
+vuln_id,cwe,file,vuln_lines,semgrep_detected,semgrep_rules,semgrep_near_unrelated,semgrep_trace_steps,codeql_detected,codeql_rules,codeql_near_unrelated,codeql_trace_steps,c7_detected,c8_trace
+JS-01,CWE-89,routes/login.ts,34,True,javascript.sequelize.security.audit.sequelize-injection-express.express-sequelize-injection,,0,True,js/sql-injection,,4,True,True
+JS-02,CWE-89,routes/search.ts,23,True,javascript.sequelize.security.audit.sequelize-injection-express.express-sequelize-injection,,0,True,js/sql-injection,js/type-confusion-through-parameter-tampering,7,True,True
+JS-03,CWE-943,routes/updateProductReviews.ts,18;20,False,,,0,True,js/sql-injection,,5,True,True
+JS-04,CWE-639,routes/updateProductReviews.ts,16;18,False,,,0,False,,js/sql-injection,0,False,False
+JS-05,CWE-601,lib/insecurity.ts,124;125;126;136,False,,,0,False,,js/type-confusion-through-parameter-tampering,0,False,False
+JS-06,CWE-79,frontend/src/app/search-result/search-result.component.ts,111,False,,,0,False,,,0,False,False
+JS-07,CWE-79,frontend/src/app/search-result/search-result.component.ts,144,False,,,0,False,,,0,False,False
+JS-08,CWE-548,server.ts,288;289;300;302,True,javascript.express.security.audit.express-check-directory-listing.express-check-directory-listing,,0,False,,js/missing-rate-limiting,0,True,False
+JS-09,CWE-348,server.ts,365,False,,,0,False,,,0,False,False
+JS-10,CWE-285,server.ts,389,False,,,0,False,,,0,False,False
+JS-11,CWE-915,server.ts,530,False,,,0,False,,,0,False,False
+JS-12,CWE-200,server.ts,750,False,,,0,False,,,0,False,False
+JS-13,CWE-521,models/user.ts,73,False,,,0,False,,,0,False,False
