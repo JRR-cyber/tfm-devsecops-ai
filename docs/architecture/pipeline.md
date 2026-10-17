@@ -81,6 +81,20 @@ Iniciar sesión exigiría guardar un token de Semgrep como secreto en el pipelin
 
 **CodeQL en PRs: análisis limitado al diff.** En `pull_request`, codeql-action solo informa de las alertas de dataflow que caen dentro del diff del PR. La extensión `codeql-action/pr-diff-range` del SARIF lo delata. En la primera ejecución solo salieron 9 hallazgos con traza, sin la inyección SQL de Juice Shop. Como el agente necesita todos los hallazgos, se desactiva con `CODEQL_ACTION_DIFF_INFORMED_QUERIES=false`.
 
-## 5. Desviaciones respecto a Juice Shop original
+## 5. El check "Code scanning results / CodeQL" en los PRs
+
+Además de los seis jobs del workflow, cada PR muestra un check llamado **"Code scanning results / CodeQL"**. No lo define el workflow: lo crea GitHub cuando el job `codeql` sube su SARIF a *code scanning*. Compara las alertas de la rama del PR con las de `main` y falla si el PR introduce alertas nuevas de severidad alta. La protección de `main` no lo exige, así que no bloquea el merge: el PR queda como `MERGEABLE` con estado `UNSTABLE`.
+
+Su resultado depende del tipo de PR:
+
+| Tipo de PR | Resultado esperado | Lectura |
+|---|---|---|
+| Añade casos al benchmark (p. ej., paquetes nuevos de SecBench.js) | ❌ Falla | Esperado. El código añadido es vulnerable a propósito y CodeQL lo detecta: es justo lo que exige el criterio C8 (por ejemplo, 118 alertas nuevas al ampliar la muestra en el PR #4). |
+| Cambios en el pipeline, los scripts o la documentación | ✅ Pasa | No se añade código analizable vulnerable. |
+| Parche del agente (`fix/ai-remediation-...`, Fase 3) | Debe pasar | Si falla, el parche **introduce** una vulnerabilidad nueva. Es una señal independiente de la tasa de regresión de la Fase 4, visible para quien revisa el PR antes del merge. |
+
+Por ese tercer caso, el umbral de fallo se deja en su valor por defecto (*Settings → Advanced Security → Code scanning → Protection rules*) en lugar de desactivarlo.
+
+## 6. Desviaciones respecto a Juice Shop original
 
 - El script `sbom` del frontend apuntaba a `dist/frontend/stats.json`, pero Angular 22 genera `browser-stats.json`. El fallo rompía `npm install` (vía `postinstall`) y el `docker build` del job `trivy-image`. Se corrige el nombre del archivo. Es un cambio de herramientas de compilación y no toca código vulnerable.
