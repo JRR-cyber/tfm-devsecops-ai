@@ -151,6 +151,9 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# IDE (JetBrains)
+.idea/
+
 # Salidas locales de escáneres y del agente (en CI se publican como artefactos)
 *.sarif
 results/
