@@ -143,6 +143,8 @@ Los casos excluidos no se versionan. Algunas rutas del *sink* son solo el nombre
 
 El objetivo de la hoja de ruta era de 30 a 50 vulnerabilidades.
 
+**En curso:** este conjunto solo tiene vulnerabilidades confirmadas, así que no permite medir la tasa de falsos positivos del triaje. Se está ampliando con hallazgos etiquetados como verdadero o falso positivo (incluidos nuevos casos de Juice Shop sin *codefix*). Los criterios están fijados en [`triage-labels.md`](triage-labels.md).
+
 ## 6. Reproducción
 
 Requisitos: Python 3.11+, Docker, Node/npm y el repositorio de SecBench.js en local (para el catálogo).
