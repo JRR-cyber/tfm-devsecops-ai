@@ -9,6 +9,33 @@
     "exploit": "juice-shop/track_order_nosql.py"
   },
   {
+    "id": "juice-shop/login-sqli",
+    "source": "juice-shop",
+    "finding": {"file": "routes/login.ts", "line": 34, "rule": "js/sql-injection"},
+    "label": "TP",
+    "evidence": "OFF",
+    "reference": "loginAdminChallenge; test/api/login.test.ts",
+    "exploit": "juice-shop/login_sqli.py"
+  },
+  {
+    "id": "juice-shop/search-sqli",
+    "source": "juice-shop",
+    "finding": {"file": "routes/search.ts", "line": 23, "rule": "js/sql-injection"},
+    "label": "TP",
+    "evidence": "OFF",
+    "reference": "unionSqlInjectionChallenge; test/api/search.test.ts",
+    "exploit": "juice-shop/search_sqli.py"
+  },
+  {
+    "id": "juice-shop/show-product-reviews-nosql",
+    "source": "juice-shop",
+    "finding": {"file": "routes/showProductReviews.ts", "line": 36, "rule": "js/code-injection"},
+    "label": "TP",
+    "evidence": "OFF",
+    "reference": "noSqlCommandChallenge; test/api/product-review.test.ts",
+    "exploit": "juice-shop/show_product_reviews_nosql.py"
+  },
+  {
     "id": "juice-shop/key-server-path",
     "source": "juice-shop",
     "finding": {"file": "routes/keyServer.ts", "line": 14, "rule": "js/path-injection"},
