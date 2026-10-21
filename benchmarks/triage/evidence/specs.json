@@ -1,0 +1,36 @@
+[
+  {
+    "id": "juice-shop/track-order-nosql",
+    "source": "juice-shop",
+    "finding": {"file": "routes/trackOrder.ts", "line": 18, "rule": "js/code-injection"},
+    "label": "TP",
+    "evidence": "OFF",
+    "reference": "noSqlOrdersChallenge; test/api/track-result.test.ts",
+    "exploit": "juice-shop/track_order_nosql.py"
+  },
+  {
+    "id": "juice-shop/key-server-path",
+    "source": "juice-shop",
+    "finding": {"file": "routes/keyServer.ts", "line": 14, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "routes/keyServer.ts:13 (rejects '/'); serve-index mounted first on /encryptionkeys (server.ts:296) rejects paths outside the folder",
+    "exploit": "juice-shop/key_server_path.py",
+    "ablation": [
+      {"file": "build/routes/keyServer.js", "old": "if (!file.includes('/')) {", "new": "if (true) {"},
+      {"file": "node_modules/serve-index/index.js", "old": "if ((path + sep).substr(0, rootPath.length) !== rootPath) {", "new": "if (false) {"}
+    ]
+  },
+  {
+    "id": "secbench-js/set-value-fixed",
+    "source": "secbench-js",
+    "package": "set-value",
+    "version": "4.0.1",
+    "finding": {"file": "index.js", "line": 107, "rule": "js/prototype-polluting-assignment"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "index.js:25 (validateKey)",
+    "exploit": "secbench-js/set-value.test.js",
+    "ablation": [{"file": "index.js", "old": "if (isUnsafeKey(key)) {", "new": "if (false) {"}]
+  }
+]
