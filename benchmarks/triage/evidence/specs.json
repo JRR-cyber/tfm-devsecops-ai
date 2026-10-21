@@ -36,6 +36,24 @@
     "exploit": "juice-shop/show_product_reviews_nosql.py"
   },
   {
+    "id": "juice-shop/redirect-open",
+    "source": "juice-shop",
+    "finding": {"file": "routes/redirect.ts", "line": 18, "rule": "js/server-side-unvalidated-url-redirection"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "redirectChallenge; lib/insecurity.ts:136 substring allowlist",
+    "exploit": "juice-shop/redirect_open.py"
+  },
+  {
+    "id": "juice-shop/data-erasure-lfr",
+    "source": "juice-shop",
+    "finding": {"file": "routes/dataErasure.ts", "line": 107, "rule": "js/template-object-injection"},
+    "label": "TP",
+    "evidence": "OFF",
+    "reference": "lfrChallenge; test/api/erasure-request.test.ts",
+    "exploit": "juice-shop/data_erasure_lfr.py"
+  },
+  {
     "id": "juice-shop/key-server-path",
     "source": "juice-shop",
     "finding": {"file": "routes/keyServer.ts", "line": 14, "rule": "js/path-injection"},
