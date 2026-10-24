@@ -92,6 +92,33 @@
     "ablation": [{"file": "build/routes/vulnCodeSnippet.js", "old": "if (codeChallenges.has(challengeKey)) {\n        return codeChallenges.get(challengeKey) ?? null;\n    }\n    return null;", "new": "if (true) {\n        return codeChallenges.get(challengeKey) ?? { vulnLines: [1], neutralLines: [], snippet: '' };\n    }\n    return null;"}]
   },
   {
+    "id": "juice-shop/currentuser-fields-leak",
+    "source": "juice-shop",
+    "finding": {"file": "routes/currentUser.ts", "line": 31, "rule": "js/remote-property-injection"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "req.query.fields selects any field of user.data, incl. password",
+    "exploit": "juice-shop/currentuser_fields_leak.py"
+  },
+  {
+    "id": "juice-shop/accuracy-property-injection",
+    "source": "juice-shop",
+    "finding": {"file": "lib/accuracy.ts", "line": 68, "rule": "js/remote-property-injection"},
+    "label": "FP",
+    "evidence": "GATE",
+    "reference": "challengeKey reaches storeVerdict only via vulnCode* endpoints, which reject unknown keys",
+    "exploit": "juice-shop/accuracy_property_injection.py"
+  },
+  {
+    "id": "juice-shop/authusers-property-injection",
+    "source": "juice-shop",
+    "finding": {"file": "lib/insecurity.ts", "line": 74, "rule": "js/remote-property-injection"},
+    "label": "FP",
+    "evidence": "GATE",
+    "reference": "put() is only called with a jwt.verify'd token / server-issued id (covers lines 74 and 75)",
+    "exploit": "juice-shop/authusers_property_injection.py"
+  },
+  {
     "id": "juice-shop/key-server-path",
     "source": "juice-shop",
     "finding": {"file": "routes/keyServer.ts", "line": 14, "rule": "js/path-injection"},
