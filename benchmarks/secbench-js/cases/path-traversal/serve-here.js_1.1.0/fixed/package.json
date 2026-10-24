@@ -1,0 +1,33 @@
+{
+  "name": "serve-here.js",
+  "version": "1.2.0",
+  "description": "Serve static files over HTTP",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChristoPy/serve-here.js.git"
+  },
+  "keywords": [
+    "HTTP",
+    "static",
+    "server",
+    "serve",
+    "files"
+  ],
+  "author": "Christopher Ribeiro <christo_campiglia@hotmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ChristoPy/serve-here.js/issues"
+  },
+  "homepage": "https://github.com/ChristoPy/serve-here.js#readme",
+  "preferGlobal": "true",
+  "bin": {
+    "serve-here": "./bin/index.js"
+  },
+  "dependencies": {
+    "commander": "^2.20.0"
+  }
+}

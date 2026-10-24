@@ -2,7 +2,7 @@
 # excluye de los hooks que modifican o validan ficheros: es código de terceros
 # con fallos intencionados y no debe alterarse (cambiaría la ground truth y
 # los partialFingerprints del SARIF).
-exclude: ^(src/app/juice-shop/|benchmarks/secbench-js/cases/[^/]+/[^/]+/src/)
+exclude: ^(src/app/juice-shop/|benchmarks/secbench-js/cases/[^/]+/[^/]+/(src|fixed)/)
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0

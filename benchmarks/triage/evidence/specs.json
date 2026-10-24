@@ -1,0 +1,259 @@
+[
+  {
+    "id": "juice-shop/track-order-nosql",
+    "source": "juice-shop",
+    "finding": {"file": "routes/trackOrder.ts", "line": 18, "rule": "js/code-injection"},
+    "label": "TP",
+    "evidence": "OFF",
+    "reference": "noSqlOrdersChallenge; test/api/track-result.test.ts",
+    "exploit": "juice-shop/track_order_nosql.py"
+  },
+  {
+    "id": "juice-shop/login-sqli",
+    "source": "juice-shop",
+    "finding": {"file": "routes/login.ts", "line": 34, "rule": "js/sql-injection"},
+    "label": "TP",
+    "evidence": "OFF",
+    "reference": "loginAdminChallenge; test/api/login.test.ts",
+    "exploit": "juice-shop/login_sqli.py"
+  },
+  {
+    "id": "juice-shop/search-sqli",
+    "source": "juice-shop",
+    "finding": {"file": "routes/search.ts", "line": 23, "rule": "js/sql-injection"},
+    "label": "TP",
+    "evidence": "OFF",
+    "reference": "unionSqlInjectionChallenge; test/api/search.test.ts",
+    "exploit": "juice-shop/search_sqli.py"
+  },
+  {
+    "id": "juice-shop/show-product-reviews-nosql",
+    "source": "juice-shop",
+    "finding": {"file": "routes/showProductReviews.ts", "line": 36, "rule": "js/code-injection"},
+    "label": "TP",
+    "evidence": "OFF",
+    "reference": "noSqlCommandChallenge; test/api/product-review.test.ts",
+    "exploit": "juice-shop/show_product_reviews_nosql.py"
+  },
+  {
+    "id": "juice-shop/redirect-open",
+    "source": "juice-shop",
+    "finding": {"file": "routes/redirect.ts", "line": 18, "rule": "js/server-side-unvalidated-url-redirection"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "redirectChallenge; lib/insecurity.ts:136 substring allowlist",
+    "exploit": "juice-shop/redirect_open.py"
+  },
+  {
+    "id": "juice-shop/data-erasure-lfr",
+    "source": "juice-shop",
+    "finding": {"file": "routes/dataErasure.ts", "line": 107, "rule": "js/template-object-injection"},
+    "label": "TP",
+    "evidence": "OFF",
+    "reference": "lfrChallenge; test/api/erasure-request.test.ts",
+    "exploit": "juice-shop/data_erasure_lfr.py"
+  },
+  {
+    "id": "juice-shop/fileserver-nullbyte",
+    "source": "juice-shop",
+    "finding": {"file": "routes/fileServer.ts", "line": 32, "rule": "js/path-injection"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "forgottenDevBackupChallenge; cutOffPoisonNullByte truncates after the .md/.pdf allowlist check",
+    "exploit": "juice-shop/fileserver_nullbyte.py"
+  },
+  {
+    "id": "juice-shop/like-product-reviews-nosql",
+    "source": "juice-shop",
+    "finding": {"file": "routes/likeProductReviews.ts", "line": 25, "rule": "js/sql-injection"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "req.body.id used as the Mongo _id selector in findOne/update",
+    "exploit": "juice-shop/like_product_reviews_nosql.py"
+  },
+  {
+    "id": "juice-shop/vulncode-fixes-path",
+    "source": "juice-shop",
+    "finding": {"file": "routes/vulnCodeFixes.ts", "line": 80, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "readFixes(key) must match an existing codefix file prefix before the fs access",
+    "exploit": "juice-shop/vulncode_fixes_path.py",
+    "ablation": [{"file": "build/routes/vulnCodeFixes.js", "old": "if (fixData.fixes.length === 0) {\n        res.status(404).json({\n            error: 'No fixes found for the snippet!'\n        });\n    }\n    else {\n        let explanation;", "new": "if (false) {\n        res.status(404).json({\n            error: 'No fixes found for the snippet!'\n        });\n    }\n    else {\n        let explanation;"}]
+  },
+  {
+    "id": "juice-shop/vulncode-snippet-path",
+    "source": "juice-shop",
+    "finding": {"file": "routes/vulnCodeSnippet.ts", "line": 89, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "retrieveCodeSnippet(key) must match a known challenge (null -> 404) before the fs access",
+    "exploit": "juice-shop/vulncode_snippet_path.py",
+    "ablation": [{"file": "build/routes/vulnCodeSnippet.js", "old": "if (codeChallenges.has(challengeKey)) {\n        return codeChallenges.get(challengeKey) ?? null;\n    }\n    return null;", "new": "if (true) {\n        return codeChallenges.get(challengeKey) ?? { vulnLines: [1], neutralLines: [], snippet: '' };\n    }\n    return null;"}]
+  },
+  {
+    "id": "juice-shop/currentuser-fields-leak",
+    "source": "juice-shop",
+    "finding": {"file": "routes/currentUser.ts", "line": 31, "rule": "js/remote-property-injection"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "req.query.fields selects any field of user.data, incl. password",
+    "exploit": "juice-shop/currentuser_fields_leak.py"
+  },
+  {
+    "id": "juice-shop/accuracy-property-injection",
+    "source": "juice-shop",
+    "finding": {"file": "lib/accuracy.ts", "line": 68, "rule": "js/remote-property-injection"},
+    "label": "FP",
+    "evidence": "GATE",
+    "reference": "challengeKey reaches storeVerdict only via vulnCode* endpoints, which reject unknown keys",
+    "exploit": "juice-shop/accuracy_property_injection.py"
+  },
+  {
+    "id": "juice-shop/authusers-property-injection",
+    "source": "juice-shop",
+    "finding": {"file": "lib/insecurity.ts", "line": 74, "rule": "js/remote-property-injection"},
+    "label": "FP",
+    "evidence": "GATE",
+    "reference": "put() is only called with a jwt.verify'd token / server-issued id (covers lines 74 and 75)",
+    "exploit": "juice-shop/authusers_property_injection.py"
+  },
+  {
+    "id": "juice-shop/updateauthenticatedusers-jwt-forge",
+    "source": "juice-shop",
+    "finding": {"file": "lib/insecurity.ts", "line": 188, "rule": "js/user-controlled-bypass"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "jwt.verify(token, publicKey) with jsonwebtoken 0.4.0 (no algorithms allowlist) trusts the header alg; forged token is put() as authenticated",
+    "exploit": "juice-shop/forged_jwt.py"
+  },
+  {
+    "id": "juice-shop/security-verify-jwt-forge",
+    "source": "juice-shop",
+    "finding": {"file": "lib/insecurity.ts", "line": 55, "rule": "js/user-controlled-bypass"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "security.verify = jws.verify(token, publicKey) with jws 0.2.6 (2-arg) trusts the header alg; same forged token verifies true",
+    "exploit": "juice-shop/forged_jwt.py"
+  },
+  {
+    "id": "juice-shop/fileserver-allowlist-bypass",
+    "source": "juice-shop",
+    "finding": {"file": "routes/fileServer.ts", "line": 26, "rule": "js/user-controlled-bypass"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "the .md/.pdf allowlist guard is bypassed by the %00 truncation applied after it (same null-byte defect as the path-injection sink at line 32)",
+    "exploit": "juice-shop/fileserver_nullbyte.py"
+  },
+  {
+    "id": "juice-shop/key-server-path",
+    "source": "juice-shop",
+    "finding": {"file": "routes/keyServer.ts", "line": 14, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "routes/keyServer.ts:13 (rejects '/'); serve-index mounted first on /encryptionkeys (server.ts:296) rejects paths outside the folder",
+    "exploit": "juice-shop/key_server_path.py",
+    "ablation": [
+      {"file": "build/routes/keyServer.js", "old": "if (!file.includes('/')) {", "new": "if (true) {"},
+      {"file": "node_modules/serve-index/index.js", "old": "if ((path + sep).substr(0, rootPath.length) !== rootPath) {", "new": "if (false) {"}
+    ]
+  },
+  {
+    "id": "juice-shop/logfile-server-path",
+    "source": "juice-shop",
+    "finding": {"file": "routes/logfileServer.ts", "line": 14, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "routes/logfileServer.ts:13 (rejects '/'); serve-index on /support/logs (server.ts:300) rejects paths outside the folder",
+    "exploit": "juice-shop/logfile_server_path.py",
+    "ablation": [
+      {"file": "build/routes/logfileServer.js", "old": "if (!file.includes('/')) {", "new": "if (true) {"},
+      {"file": "node_modules/serve-index/index.js", "old": "if ((path + sep).substr(0, rootPath.length) !== rootPath) {", "new": "if (false) {"}
+    ]
+  },
+  {
+    "id": "juice-shop/quarantine-server-path",
+    "source": "juice-shop",
+    "finding": {"file": "routes/quarantineServer.ts", "line": 14, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "routes/quarantineServer.ts:13 (rejects '/'); serve-index on /ftp (server.ts:288) rejects paths outside the folder",
+    "exploit": "juice-shop/quarantine_server_path.py",
+    "ablation": [
+      {"file": "build/routes/quarantineServer.js", "old": "if (!file.includes('/')) {", "new": "if (true) {"},
+      {"file": "node_modules/serve-index/index.js", "old": "if ((path + sep).substr(0, rootPath.length) !== rootPath) {", "new": "if (false) {"}
+    ]
+  },
+  {
+    "id": "secbench-js/set-value-fixed",
+    "source": "secbench-js",
+    "package": "set-value",
+    "version": "4.0.1",
+    "finding": {"file": "index.js", "line": 107, "rule": "js/prototype-polluting-assignment"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "index.js validateKey/isUnsafeKey rejects __proto__, constructor, prototype",
+    "exploit": "secbench-js/set-value.test.js",
+    "ablation": [{"file": "index.js", "old": "if (isUnsafeKey(key)) {", "new": "if (false) {"}]
+  },
+  {
+    "id": "secbench-js/underscore-fixed",
+    "source": "secbench-js",
+    "package": "underscore",
+    "version": "1.12.1",
+    "finding": {"file": "modules/template.js", "line": 75, "rule": "js/unsafe-code-construction"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "CVE-2021-23358 fix: settings.variable must match bareIdentifier /^\\s*(\\w|\\$)+\\s*$/",
+    "exploit": "secbench-js/underscore.test.js",
+    "ablation": [{"file": "underscore.js", "old": "if (!bareIdentifier.test(argument)) throw new Error(argument);", "new": "if (false) throw new Error(argument);"}]
+  },
+  {
+    "id": "secbench-js/giting-fixed",
+    "source": "secbench-js",
+    "package": "giting",
+    "version": "0.0.8",
+    "finding": {"file": "lib/git.js", "line": 221, "rule": "js/shell-command-constructed-from-input"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "fix wraps the branch in encodeURIComponent before the git command",
+    "exploit": "secbench-js/giting.test.js",
+    "ablation": [{"file": "lib/git.js", "old": "var cmd = ['git', 'pull', 'file://' + path.resolve(self.repoDir, repo.organization, repo.name), encodeURIComponent(repo.branch)].join(' ');", "new": "var cmd = ['git', 'pull', 'file://' + path.resolve(self.repoDir, repo.organization, repo.name), repo.branch].join(' ');"}]
+  },
+  {
+    "id": "secbench-js/jsonpointer-fixed",
+    "source": "secbench-js",
+    "package": "jsonpointer",
+    "version": "5.0.0",
+    "finding": {"file": "jsonpointer.js", "line": 34, "rule": "js/prototype-polluting-assignment"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "fix rejects constructor/prototype/__proto__ pointer segments",
+    "exploit": "secbench-js/jsonpointer.test.js",
+    "ablation": [{"file": "jsonpointer.js", "old": "if (pointer[p] === 'constructor' || pointer[p] === 'prototype' || pointer[p] === '__proto__') return obj", "new": "if (false) return obj"}]
+  },
+  {
+    "id": "secbench-js/madlib-object-utils-fixed",
+    "source": "secbench-js",
+    "package": "madlib-object-utils",
+    "version": "0.1.7",
+    "finding": {"file": "lib/utils.js", "line": 76, "rule": "js/prototype-polluting-assignment"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "setValue returns early when the key is __proto__",
+    "exploit": "secbench-js/madlib-object-utils.test.js",
+    "ablation": [{"file": "lib/utils.js", "old": "if (key === '__proto__') {\n        return object;\n      }\n      while (key) {", "new": "if (false) {\n        return object;\n      }\n      while (key) {"}]
+  },
+  {
+    "id": "secbench-js/serve-here-fixed",
+    "source": "secbench-js",
+    "package": "serve-here.js",
+    "version": "1.2.0",
+    "finding": {"file": "source/server.js", "line": 35, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "HasMaliciousPath rejects paths whose Path.join escapes RootFolder (response.js)",
+    "exploit": "secbench-js/serve-here.test.js",
+    "ablation": [{"file": "source/response.js", "old": "const HasPathTraversal = Path.join(Options.RootFolder, ReceivedPath).indexOf(Options.RootFolder) !== 0;", "new": "const HasPathTraversal = false;"}]
+  }
+]

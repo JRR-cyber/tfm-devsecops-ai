@@ -14,5 +14,8 @@ useDefault = true
 description = "Benchmark deliberadamente vulnerable (secretos falsos intencionados)"
 paths = [
   '''^src/app/juice-shop/''',
-  '''^benchmarks/secbench-js/cases/[^/]+/[^/]+/src/''',
+  '''^benchmarks/secbench-js/cases/[^/]+/[^/]+/(src|fixed)/''',
+  # Exploits de triaje: reutilizan las credenciales semilla PÚBLICAS de los
+  # retos de Juice Shop (las mismas que sus propios tests), no secretos reales.
+  '''^benchmarks/triage/evidence/''',
 ]

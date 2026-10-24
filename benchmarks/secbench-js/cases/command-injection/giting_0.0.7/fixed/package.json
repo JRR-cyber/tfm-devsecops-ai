@@ -1,0 +1,29 @@
+{
+  "author": {
+    "name": "Tim",
+    "email": "mangoraft@gmail.com"
+  },
+  "bugs": {
+    "url": "https://github.com/MangoRaft/git/issues"
+  },
+  "dependencies": {
+    "basic": "0.0.3",
+    "debug": "4.1.1",
+    "mkdirp": "0.5.0",
+    "pushover-giting": "0.0.x"
+  },
+  "description": "Git server",
+  "homepage": "https://github.com/MangoRaft/git",
+  "keywords": [
+    "git",
+    "server"
+  ],
+  "license": "MIT",
+  "main": "./lib/git.js",
+  "name": "giting",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MangoRaft/git.git"
+  },
+  "version": "0.0.8"
+}
