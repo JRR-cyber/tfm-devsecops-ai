@@ -63,6 +63,15 @@
     "exploit": "juice-shop/fileserver_nullbyte.py"
   },
   {
+    "id": "juice-shop/like-product-reviews-nosql",
+    "source": "juice-shop",
+    "finding": {"file": "routes/likeProductReviews.ts", "line": 25, "rule": "js/sql-injection"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "req.body.id used as the Mongo _id selector in findOne/update",
+    "exploit": "juice-shop/like_product_reviews_nosql.py"
+  },
+  {
     "id": "juice-shop/key-server-path",
     "source": "juice-shop",
     "finding": {"file": "routes/keyServer.ts", "line": 14, "rule": "js/path-injection"},
