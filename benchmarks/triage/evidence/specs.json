@@ -160,5 +160,17 @@
     "reference": "setValue returns early when the key is __proto__",
     "exploit": "secbench-js/madlib-object-utils.test.js",
     "ablation": [{"file": "lib/utils.js", "old": "if (key === '__proto__') {\n        return object;\n      }\n      while (key) {", "new": "if (false) {\n        return object;\n      }\n      while (key) {"}]
+  },
+  {
+    "id": "secbench-js/serve-here-fixed",
+    "source": "secbench-js",
+    "package": "serve-here.js",
+    "version": "1.2.0",
+    "finding": {"file": "source/server.js", "line": 35, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "HasMaliciousPath rejects paths whose Path.join escapes RootFolder (response.js)",
+    "exploit": "secbench-js/serve-here.test.js",
+    "ablation": [{"file": "source/response.js", "old": "const HasPathTraversal = Path.join(Options.RootFolder, ReceivedPath).indexOf(Options.RootFolder) !== 0;", "new": "const HasPathTraversal = false;"}]
   }
 ]
