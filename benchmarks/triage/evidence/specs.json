@@ -112,5 +112,53 @@
     "reference": "index.js validateKey/isUnsafeKey rejects __proto__, constructor, prototype",
     "exploit": "secbench-js/set-value.test.js",
     "ablation": [{"file": "index.js", "old": "if (isUnsafeKey(key)) {", "new": "if (false) {"}]
+  },
+  {
+    "id": "secbench-js/underscore-fixed",
+    "source": "secbench-js",
+    "package": "underscore",
+    "version": "1.12.1",
+    "finding": {"file": "modules/template.js", "line": 75, "rule": "js/unsafe-code-construction"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "CVE-2021-23358 fix: settings.variable must match bareIdentifier /^\\s*(\\w|\\$)+\\s*$/",
+    "exploit": "secbench-js/underscore.test.js",
+    "ablation": [{"file": "underscore.js", "old": "if (!bareIdentifier.test(argument)) throw new Error(argument);", "new": "if (false) throw new Error(argument);"}]
+  },
+  {
+    "id": "secbench-js/giting-fixed",
+    "source": "secbench-js",
+    "package": "giting",
+    "version": "0.0.8",
+    "finding": {"file": "lib/git.js", "line": 221, "rule": "js/shell-command-constructed-from-input"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "fix wraps the branch in encodeURIComponent before the git command",
+    "exploit": "secbench-js/giting.test.js",
+    "ablation": [{"file": "lib/git.js", "old": "var cmd = ['git', 'pull', 'file://' + path.resolve(self.repoDir, repo.organization, repo.name), encodeURIComponent(repo.branch)].join(' ');", "new": "var cmd = ['git', 'pull', 'file://' + path.resolve(self.repoDir, repo.organization, repo.name), repo.branch].join(' ');"}]
+  },
+  {
+    "id": "secbench-js/jsonpointer-fixed",
+    "source": "secbench-js",
+    "package": "jsonpointer",
+    "version": "5.0.0",
+    "finding": {"file": "jsonpointer.js", "line": 34, "rule": "js/prototype-polluting-assignment"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "fix rejects constructor/prototype/__proto__ pointer segments",
+    "exploit": "secbench-js/jsonpointer.test.js",
+    "ablation": [{"file": "jsonpointer.js", "old": "if (pointer[p] === 'constructor' || pointer[p] === 'prototype' || pointer[p] === '__proto__') return obj", "new": "if (false) return obj"}]
+  },
+  {
+    "id": "secbench-js/madlib-object-utils-fixed",
+    "source": "secbench-js",
+    "package": "madlib-object-utils",
+    "version": "0.1.7",
+    "finding": {"file": "lib/utils.js", "line": 76, "rule": "js/prototype-polluting-assignment"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "setValue returns early when the key is __proto__",
+    "exploit": "secbench-js/madlib-object-utils.test.js",
+    "ablation": [{"file": "lib/utils.js", "old": "if (key === '__proto__') {\n        return object;\n      }\n      while (key) {", "new": "if (false) {\n        return object;\n      }\n      while (key) {"}]
   }
 ]
