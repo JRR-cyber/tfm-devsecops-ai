@@ -72,6 +72,26 @@
     "exploit": "juice-shop/like_product_reviews_nosql.py"
   },
   {
+    "id": "juice-shop/vulncode-fixes-path",
+    "source": "juice-shop",
+    "finding": {"file": "routes/vulnCodeFixes.ts", "line": 80, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "readFixes(key) must match an existing codefix file prefix before the fs access",
+    "exploit": "juice-shop/vulncode_fixes_path.py",
+    "ablation": [{"file": "build/routes/vulnCodeFixes.js", "old": "if (fixData.fixes.length === 0) {\n        res.status(404).json({\n            error: 'No fixes found for the snippet!'\n        });\n    }\n    else {\n        let explanation;", "new": "if (false) {\n        res.status(404).json({\n            error: 'No fixes found for the snippet!'\n        });\n    }\n    else {\n        let explanation;"}]
+  },
+  {
+    "id": "juice-shop/vulncode-snippet-path",
+    "source": "juice-shop",
+    "finding": {"file": "routes/vulnCodeSnippet.ts", "line": 89, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "retrieveCodeSnippet(key) must match a known challenge (null -> 404) before the fs access",
+    "exploit": "juice-shop/vulncode_snippet_path.py",
+    "ablation": [{"file": "build/routes/vulnCodeSnippet.js", "old": "if (codeChallenges.has(challengeKey)) {\n        return codeChallenges.get(challengeKey) ?? null;\n    }\n    return null;", "new": "if (true) {\n        return codeChallenges.get(challengeKey) ?? { vulnLines: [1], neutralLines: [], snippet: '' };\n    }\n    return null;"}]
+  },
+  {
     "id": "juice-shop/key-server-path",
     "source": "juice-shop",
     "finding": {"file": "routes/keyServer.ts", "line": 14, "rule": "js/path-injection"},
