@@ -2,6 +2,14 @@
 
 Decisiones de diseño del conjunto experimental, con su motivo y su fecha. Alimenta el capítulo de gestión de proyecto de la memoria (Fase 6). La más reciente arriba.
 
+## D7 — Estándar de evidencia mixto para acelerar el etiquetado (2026-10-24)
+
+**Decisión.** Mantener la ablación ejecutable (`ABL`) para los casos **no obvios**, y usar un estándar más ligero (`GATE`) para los **FP claros**: citar la guarda en el código y demostrarla con un check reproducible (la entrada maliciosa se rechaza, un control benigno funciona), sin exigir que la ablación llegue hasta el *sink*.
+
+**Motivo.** Las primeras familias (path traversal, vulnCode*) mostraron que la ablación completa de cada FP es muy costosa (contexto único, observables no triviales) y a veces no encaja cuando el contenido leído no se devuelve. Para un dataset de ~50 hallazgos con una fecha de TFM acotada, aplicar `GATE` a los FP evidentes y reservar `ABL` para los dudosos reduce mucho el tiempo sin perder reproducibilidad ni trazabilidad. Toda etiqueta sigue respaldada por un check ejecutable y por la cita del código; `UNCERTAIN` se mantiene para lo que no se puede decidir.
+
+**Consecuencia.** El runner `triage_evidence.py` admite el tipo `GATE` (ejecuta el check una vez; la función se autovalida). Los FP ya etiquetados con `ABL` se conservan.
+
 ## D6 — Los falsos positivos también salen de SecBench.js (2026-10-24)
 
 **Decisión.** El conjunto de falsos positivos se toma de Juice Shop **y** de las versiones corregidas de SecBench.js. Se vendorizan **solo** las versiones corregidas de los casos que CodeQL sigue marcando (~10), que son las que aportan hallazgos; las otras 20 no se añaden. **Supersede la parte de D5** sobre la fuente de FP.

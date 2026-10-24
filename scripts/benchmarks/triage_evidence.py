@@ -123,6 +123,11 @@ def main() -> None:
         ok, detail = run(spec, ablation=None)
         if spec["label"] == "TP":
             holds, summary = ok, f"original: {'exploited' if ok else 'NOT exploited'} ({detail})"
+        elif spec.get("evidence") == "GATE":
+            # FP backed by a documented guard + one reproducible check: the exploit
+            # function self-verifies (malicious input rejected, benign control works)
+            # and returns True when the guard holds. No ablation (triage-labels.md s.6).
+            holds, summary = ok, f"guard check: {'confirmed' if ok else 'FAILED'} ({detail})"
         else:
             ok_abl, detail_abl = run(spec, ablation=spec["ablation"])
             holds = not ok and ok_abl
