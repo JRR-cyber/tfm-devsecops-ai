@@ -14,17 +14,18 @@ Una etiqueta basada solo en la lectura del código es una opinión del autor y s
 
 ## 3. Inclusión
 
-El conjunto de triaje sale **solo de Juice Shop** (ver [`decisions.md`](decisions.md), D5): es la fuente que el pipeline ya escanea entero, así que cada hallazgo tiene su huella real en `unified/findings.sarif`, que es lo que ve el agente. Las versiones corregidas de SecBench.js se descartaron como fuente de falsos positivos para no vendorizar ~30 paquetes ni añadir un job a CI; su análisis queda como resultado cualitativo (D5).
+El conjunto de triaje sale de las dos fuentes del dataset (ver [`decisions.md`](decisions.md), D6). Todo hallazgo tiene que salir del SARIF del pipeline (`unified/findings.sarif`), que es lo que ve el agente, y con huella `tfmContextHash` real: por eso las versiones corregidas de SecBench.js que se usen como FP se vendorizan en el repo (CodeQL escanea todo el repositorio, no hace falta un job nuevo).
 
 | Criterio | Definición |
 |---|---|
 | T1 | Hallazgo de **CodeQL** con traza de taint de dos o más pasos (`codeFlows`), igual que C8. Semgrep OSS no da trazas ([`pipeline.md`, sección 4](../architecture/pipeline.md)). |
 | T2 | Producido por el pipeline de CI (misma versión y suite de CodeQL, 2.27.2 `security-extended`); se anota el run. |
-| T3 | En `src/app/juice-shop/`, salvo `test/` y `data/static/codefixes/` (los fragmentos de los retos de código, que no se ejecutan). Todas las reglas y severidades. |
+| T3 | **Juice Shop:** en `src/app/juice-shop/`, salvo `test/` y `data/static/codefixes/` (los fragmentos de los retos de código, que no se ejecutan). Todas las reglas y severidades. |
+| T4 | **SecBench.js:** hallazgos en la **versión corregida** de los casos del dataset que CodeQL sigue marcando (regla con una CWE de la clase del caso, `CLASS_CWES` de `secbench_detect.py`). Solo esas versiones corregidas se vendorizan (`cases/<clase>/<caso>/fixed/`). |
 
 No se filtra por severidad: la FPR se mide sobre todo lo que el escáner reporta. El umbral CVSS ≥ 7.0 (Paso 3.3) se aplica después, al decidir qué se remedia.
 
-Los 30 casos vulnerables de SecBench.js (`dataset.md`) son verdaderos positivos por construcción (exploit verificado en C5) y forman el grueso del conjunto de **remediación**; pueden usarse además como ejemplos de TP en el triaje.
+Los 30 casos **vulnerables** de SecBench.js (`dataset.md`) son verdaderos positivos por construcción (exploit verificado en C5) y forman el grueso del conjunto de **remediación**; son además los TP de SecBench en el triaje. Sus **versiones corregidas** aportan los FP de SecBench (T4).
 
 ## 4. Unidad
 
@@ -37,12 +38,13 @@ El exploit tiene que respetar quién controla la fuente:
 - **Juice Shop:** un usuario remoto, autenticado o no, que envía peticiones HTTP arbitrarias. No controla la configuración del servidor, los archivos del disco ni la base de datos salvo a través de la propia aplicación. Los exploits se lanzan por HTTP contra la imagen de contenedor que construye el pipeline (`docker build src/app/juice-shop`, la misma que escanea Trivy), en Linux, no contra funciones sueltas, para que cuenten todos los *middlewares*.
   - **Configuración: todos los retos activos** (`challenges.safetyMode: disabled`). En contenedores, el modo `auto` por defecto desactiva los retos marcados como peligrosos, y parte del código aplica entonces una protección que no existe con el reto activo. Por ejemplo, `routes/trackOrder.ts` sanea el `id` si el reto de XSS reflejado está desactivado. El análisis estático examina el código sin configuración, así que la etiqueta se fija con la configuración que activa todas las rutas de código. Las protecciones que dependen de la configuración se anotan en la justificación.
   - **Plataforma: Linux.** El resultado puede depender del sistema operativo. Por ejemplo, `routes/keyServer.ts` solo rechaza `/`, y en Windows `\` también separa rutas.
+- **SecBench.js:** el modelo de SecBench.js y de las consultas de librería de CodeQL. El atacante controla los argumentos de las funciones exportadas por el paquete. Los exploits se ejecutan en el arnés de Docker (`benchmarks/secbench-js/harness/`, Node 16, Linux) contra la **versión corregida** instalada desde npm.
 
 ## 6. Etiquetas y evidencia
 
 | Etiqueta | Se asigna cuando… | Evidencia ejecutable |
 |---|---|---|
-| **TP** | Un exploit que respeta el modelo de amenaza **tiene éxito** contra el código tal cual. | `OFF`: payload de un test oficial de Juice Shop que resuelve el reto. `POC`: exploit propio versionado en `benchmarks/triage/evidence/`. |
+| **TP** | Un exploit que respeta el modelo de amenaza **tiene éxito** contra el código tal cual (incluye arreglos incompletos de SecBench.js que siguen siendo explotables). | `OFF`: payload de un test oficial de Juice Shop que resuelve el reto. `POC`: exploit propio versionado en `benchmarks/triage/evidence/`. |
 | **FP** | El exploit **falla** contra el código tal cual **y tiene éxito** cuando se desactiva la protección que se cita (ablación). | `ABL`: el mismo exploit, ejecutado dos veces: con el código original y con la protección eliminada por un cambio mínimo y explícito. |
 | **UNCERTAIN** | No se puede construir ninguna de las dos pruebas (p. ej., no hay protección concreta que desactivar, o el efecto no es observable). | Motivo por escrito. |
 
@@ -57,6 +59,7 @@ Para que la ablación sea un control válido:
 Reglas adicionales:
 - La severidad no cambia la etiqueta: una inyección en logs explotable es TP aunque su impacto sea bajo.
 - El código que detecta si un reto está resuelto (`solveIf`, `routes/verify.ts`) es parte de la aplicación y se etiqueta con el mismo criterio.
+- **El oráculo de SecBench.js no basta para etiquetar FP.** Que el exploit original falle contra la versión corregida no prueba que esta sea segura (el ejemplo de `connection-tester` 0.2.1). Cada versión corregida marcada necesita su propia evidencia: ablación (FP) o un exploit que funcione (arreglo incompleto → TP, o retención si no hay advisory, D3).
 - Los `UNCERTAIN` se informan aparte, con un análisis de sensibilidad (contándolos como TP y como FP).
 - **Retención por posible divulgación.** Si un exploit fuera contra la versión **actual** de un paquete de terceros todavía usado y sin advisory público, no se versiona en este repositorio público y el caso queda fuera del conjunto; validar o reportar esa vulnerabilidad queda fuera del alcance del TFM. Es la situación de `connection-tester` 0.2.1 encontrada al analizar SecBench.js (ver [`decisions.md`](decisions.md), D3 y D5).
 

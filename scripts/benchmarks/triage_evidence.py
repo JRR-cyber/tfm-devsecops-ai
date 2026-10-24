@@ -10,13 +10,19 @@ exploit that backs it:
         to a temporary copy; the benchmark itself is never modified). Every
         guard on the path must be cited, or the ablated run still fails.
 
-The triage set is Juice Shop only (docs/benchmark/decisions.md, D5). Exploits
-(``juice-shop/*.py``, ``exploit(base_url) -> (ok, detail)``) run over HTTP
-against the container image the pipeline builds
+The FP set draws from Juice Shop and from the flagged fixed versions of
+SecBench.js cases (docs/benchmark/decisions.md, D5).
+
+Juice Shop exploits (``juice-shop/*.py``, ``exploit(base_url) -> (ok, detail)``)
+run over HTTP against the container image the pipeline builds
 (``docker build -t tfm/juice-shop:ci src/app/juice-shop``) with every
 challenge enabled. An FP's ablation edits the compiled file inside the image
 (``build/...js``), or a dependency under ``node_modules/``, mounted read-only
 over the original.
+
+SecBench.js exploits (``secbench-js/*.test.js``, Jest, pass = exploit
+succeeded) run in the harness (``benchmarks/secbench-js/harness``,
+``run_evidence``); their ablation edits a file of the installed package.
 
 Usage:
     python scripts/benchmarks/triage_evidence.py [<spec id> ...]
@@ -34,6 +40,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "benchmarks" / "triage" / "evidence"
 JUICE_IMAGE = "tfm/juice-shop:ci"
+HARNESS_IMAGE = "tfm/secbench-harness"
 # Every challenge enabled: in containers safetyMode "auto" disables the risky
 # ones, and some routes then sanitize their input (triage-labels.md, section 5).
 JUICE_CONFIG = json.dumps({"challenges": {"safetyMode": "disabled"}})
@@ -51,9 +58,24 @@ def ablate(text: str, edit: dict) -> str:
     return text.replace(edit["old"], edit["new"])
 
 
+def run_secbench(spec: dict, ablation: list[dict] | None, tmp: Path) -> tuple[bool, str]:
+    args = ["run", "--rm", "-v", f"{EVIDENCE}:/evidence:ro"]
+    command = ["run_evidence", spec["package"], spec["version"], f"/evidence/{spec['exploit']}"]
+    if ablation:
+        (tmp / "ablation.json").write_text(json.dumps(ablation), encoding="utf-8")
+        args += ["-v", f"{tmp}:/ablation:ro"]
+        command.append("/ablation/ablation.json")
+    res = docker(*args, HARNESS_IMAGE, *command, check=False)
+    if res.returncode not in (0, 1):
+        raise RuntimeError(f"run_evidence exited {res.returncode}:\n{(res.stdout + res.stderr)[-2000:]}")
+    return res.returncode == 0, "jest passed" if res.returncode == 0 else "jest failed"
+
+
 def run(spec: dict, ablation: list[dict] | None) -> tuple[bool, str]:
     with tempfile.TemporaryDirectory() as tmp_name:
         tmp = Path(tmp_name)
+        if spec["source"] == "secbench-js":
+            return run_secbench(spec, ablation, tmp)
         mounts = []
         if ablation:
             container = docker("create", JUICE_IMAGE).stdout.strip()

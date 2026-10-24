@@ -2,13 +2,21 @@
 
 Decisiones de diseño del conjunto experimental, con su motivo y su fecha. Alimenta el capítulo de gestión de proyecto de la memoria (Fase 6). La más reciente arriba.
 
-## D5 — El conjunto de falsos positivos sale solo de Juice Shop (2026-10-24)
+## D6 — Los falsos positivos también salen de SecBench.js (2026-10-24)
 
-**Decisión.** Los falsos positivos del conjunto de triaje se toman únicamente de Juice Shop. Las versiones corregidas de SecBench.js **no** se usan como fuente de FP.
+**Decisión.** El conjunto de falsos positivos se toma de Juice Shop **y** de las versiones corregidas de SecBench.js. Se vendorizan **solo** las versiones corregidas de los casos que CodeQL sigue marcando (~10), que son las que aportan hallazgos; las otras 20 no se añaden. **Supersede la parte de D5** sobre la fuente de FP.
 
-**Motivo.** El agente de la Fase 3 triará lo que haya en `unified/findings.sarif`, y la huella `tfmContextHash` la calcula el pipeline a partir del archivo y del texto de la línea ([`unify_results.py`](../../scripts/pipeline/unify_results.py)). Juice Shop ya lo escanea CI entero, así que cada hallazgo (sea TP o FP) tiene huella real y es trazable al artefacto. Usar versiones corregidas de SecBench.js obligaría a vendorizar ~30 paquetes más y a añadir un job de escaneo: repositorio más pesado, más tiempo de CI y más mantenimiento, es decir, deuda técnica. Juice Shop tiene FP con traza de sobra (listados de directorio con guardas, *stack traces* acotados, aleatoriedad sin impacto…).
+**Motivo.** Los FP de paquetes npm poco conocidos son más diversos y menos memorizables que los de Juice Shop, lo que refuerza la prueba de control de memorización (Paso 5.3). Y el coste real es menor de lo que decía D5: **el job de CodeQL escanea todo el repositorio**, así que vendorizar las versiones corregidas basta para que CI las escanee y les asigne huella real; **no hace falta un job nuevo**. El único coste es el tamaño del repo (~10 árboles de paquete, como ya están los vulnerables en `cases/*/src/`) y etiquetar esos hallazgos.
 
-**Consecuencia.** Se eliminó el material de SecBench del conjunto de triaje (exploit `set-value`, arnés `run_evidence`, filas correspondientes). El conjunto de triaje queda Juice-Shop-only; SecBench.js sigue aportando sus 30 casos vulnerables como TP del conjunto de remediación.
+**Consecuencia.** Se restauró la infraestructura de SecBench (`run_evidence`, rama de `triage_evidence.py`). Cada versión corregida marcada se analiza por separado: si el arreglo es real, es FP (evidencia por ablación); si es un arreglo incompleto que sigue siendo explotable, es TP o se retiene (D3). SecBench.js aporta así TP (30 casos vulnerables) y FP (versiones corregidas marcadas) al triaje.
+
+## D5 — [Superada por D6] El conjunto de falsos positivos sale solo de Juice Shop (2026-10-24)
+
+> Superada el mismo día por D6: se decidió incluir también SecBench.js en los FP. Se conserva el registro porque la alternativa se consideró en serio y el razonamiento de reproducibilidad sigue siendo válido.
+
+**Decisión (revertida).** Los falsos positivos se tomarían únicamente de Juice Shop.
+
+**Motivo.** El agente triará lo que haya en `unified/findings.sarif`, con huella `tfmContextHash` calculada por el pipeline ([`unify_results.py`](../../scripts/pipeline/unify_results.py)); Juice Shop ya lo escanea CI entero. Se creía que usar SecBench exigía un job de escaneo nuevo (incorrecto: CodeQL ya escanea todo el repo, ver D6).
 
 **Resultado cualitativo que se conserva.** Al analizar en local las 30 versiones corregidas de SecBench.js con el mismo CodeQL del pipeline, 10 seguían marcadas. La revisión manual confirmó que al menos una, `connection-tester` 0.2.1, es un **arreglo incompleto realmente explotable** (la validación del host usa una regex construida desde un string, donde `\.` queda como `.`). Es un dato sobre la validez del oráculo de SecBench.js ("corregido según el exploit" ≠ "no vulnerable") que va a la discusión de la memoria; el exploit no se versiona (D3).
 
