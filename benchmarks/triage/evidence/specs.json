@@ -119,6 +119,33 @@
     "exploit": "juice-shop/authusers_property_injection.py"
   },
   {
+    "id": "juice-shop/updateauthenticatedusers-jwt-forge",
+    "source": "juice-shop",
+    "finding": {"file": "lib/insecurity.ts", "line": 188, "rule": "js/user-controlled-bypass"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "jwt.verify(token, publicKey) with jsonwebtoken 0.4.0 (no algorithms allowlist) trusts the header alg; forged token is put() as authenticated",
+    "exploit": "juice-shop/forged_jwt.py"
+  },
+  {
+    "id": "juice-shop/security-verify-jwt-forge",
+    "source": "juice-shop",
+    "finding": {"file": "lib/insecurity.ts", "line": 55, "rule": "js/user-controlled-bypass"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "security.verify = jws.verify(token, publicKey) with jws 0.2.6 (2-arg) trusts the header alg; same forged token verifies true",
+    "exploit": "juice-shop/forged_jwt.py"
+  },
+  {
+    "id": "juice-shop/fileserver-allowlist-bypass",
+    "source": "juice-shop",
+    "finding": {"file": "routes/fileServer.ts", "line": 26, "rule": "js/user-controlled-bypass"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "the .md/.pdf allowlist guard is bypassed by the %00 truncation applied after it (same null-byte defect as the path-injection sink at line 32)",
+    "exploit": "juice-shop/fileserver_nullbyte.py"
+  },
+  {
     "id": "juice-shop/key-server-path",
     "source": "juice-shop",
     "finding": {"file": "routes/keyServer.ts", "line": 14, "rule": "js/path-injection"},
