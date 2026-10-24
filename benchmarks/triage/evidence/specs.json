@@ -54,6 +54,15 @@
     "exploit": "juice-shop/data_erasure_lfr.py"
   },
   {
+    "id": "juice-shop/fileserver-nullbyte",
+    "source": "juice-shop",
+    "finding": {"file": "routes/fileServer.ts", "line": 32, "rule": "js/path-injection"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "forgottenDevBackupChallenge; cutOffPoisonNullByte truncates after the .md/.pdf allowlist check",
+    "exploit": "juice-shop/fileserver_nullbyte.py"
+  },
+  {
     "id": "juice-shop/key-server-path",
     "source": "juice-shop",
     "finding": {"file": "routes/keyServer.ts", "line": 14, "rule": "js/path-injection"},
@@ -63,6 +72,32 @@
     "exploit": "juice-shop/key_server_path.py",
     "ablation": [
       {"file": "build/routes/keyServer.js", "old": "if (!file.includes('/')) {", "new": "if (true) {"},
+      {"file": "node_modules/serve-index/index.js", "old": "if ((path + sep).substr(0, rootPath.length) !== rootPath) {", "new": "if (false) {"}
+    ]
+  },
+  {
+    "id": "juice-shop/logfile-server-path",
+    "source": "juice-shop",
+    "finding": {"file": "routes/logfileServer.ts", "line": 14, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "routes/logfileServer.ts:13 (rejects '/'); serve-index on /support/logs (server.ts:300) rejects paths outside the folder",
+    "exploit": "juice-shop/logfile_server_path.py",
+    "ablation": [
+      {"file": "build/routes/logfileServer.js", "old": "if (!file.includes('/')) {", "new": "if (true) {"},
+      {"file": "node_modules/serve-index/index.js", "old": "if ((path + sep).substr(0, rootPath.length) !== rootPath) {", "new": "if (false) {"}
+    ]
+  },
+  {
+    "id": "juice-shop/quarantine-server-path",
+    "source": "juice-shop",
+    "finding": {"file": "routes/quarantineServer.ts", "line": 14, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "ABL",
+    "reference": "routes/quarantineServer.ts:13 (rejects '/'); serve-index on /ftp (server.ts:288) rejects paths outside the folder",
+    "exploit": "juice-shop/quarantine_server_path.py",
+    "ablation": [
+      {"file": "build/routes/quarantineServer.js", "old": "if (!file.includes('/')) {", "new": "if (true) {"},
       {"file": "node_modules/serve-index/index.js", "old": "if ((path + sep).substr(0, rootPath.length) !== rootPath) {", "new": "if (false) {"}
     ]
   }
