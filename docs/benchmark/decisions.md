@@ -2,6 +2,16 @@
 
 Decisiones de diseño del conjunto experimental, con su motivo y su fecha. Alimenta el capítulo de gestión de proyecto de la memoria (Fase 6). La más reciente arriba.
 
+## D5 — El conjunto de falsos positivos sale solo de Juice Shop (2026-10-24)
+
+**Decisión.** Los falsos positivos del conjunto de triaje se toman únicamente de Juice Shop. Las versiones corregidas de SecBench.js **no** se usan como fuente de FP.
+
+**Motivo.** El agente de la Fase 3 triará lo que haya en `unified/findings.sarif`, y la huella `tfmContextHash` la calcula el pipeline a partir del archivo y del texto de la línea ([`unify_results.py`](../../scripts/pipeline/unify_results.py)). Juice Shop ya lo escanea CI entero, así que cada hallazgo (sea TP o FP) tiene huella real y es trazable al artefacto. Usar versiones corregidas de SecBench.js obligaría a vendorizar ~30 paquetes más y a añadir un job de escaneo: repositorio más pesado, más tiempo de CI y más mantenimiento, es decir, deuda técnica. Juice Shop tiene FP con traza de sobra (listados de directorio con guardas, *stack traces* acotados, aleatoriedad sin impacto…).
+
+**Consecuencia.** Se eliminó el material de SecBench del conjunto de triaje (exploit `set-value`, arnés `run_evidence`, filas correspondientes). El conjunto de triaje queda Juice-Shop-only; SecBench.js sigue aportando sus 30 casos vulnerables como TP del conjunto de remediación.
+
+**Resultado cualitativo que se conserva.** Al analizar en local las 30 versiones corregidas de SecBench.js con el mismo CodeQL del pipeline, 10 seguían marcadas. La revisión manual confirmó que al menos una, `connection-tester` 0.2.1, es un **arreglo incompleto realmente explotable** (la validación del host usa una regex construida desde un string, donde `\.` queda como `.`). Es un dato sobre la validez del oráculo de SecBench.js ("corregido según el exploit" ≠ "no vulnerable") que va a la discusión de la memoria; el exploit no se versiona (D3).
+
 ## D4 — Priorizar los verdaderos positivos con exploit oficial (2026-10-22)
 
 **Decisión.** Al etiquetar, empezar por los verdaderos positivos de Juice Shop que ya tienen un exploit escrito por OWASP (un test de API o Cypress que resuelve el reto), antes que por los que exigen un PoC propio.

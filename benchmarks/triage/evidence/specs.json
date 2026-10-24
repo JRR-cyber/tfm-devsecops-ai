@@ -65,17 +65,5 @@
       {"file": "build/routes/keyServer.js", "old": "if (!file.includes('/')) {", "new": "if (true) {"},
       {"file": "node_modules/serve-index/index.js", "old": "if ((path + sep).substr(0, rootPath.length) !== rootPath) {", "new": "if (false) {"}
     ]
-  },
-  {
-    "id": "secbench-js/set-value-fixed",
-    "source": "secbench-js",
-    "package": "set-value",
-    "version": "4.0.1",
-    "finding": {"file": "index.js", "line": 107, "rule": "js/prototype-polluting-assignment"},
-    "label": "FP",
-    "evidence": "ABL",
-    "reference": "index.js:25 (validateKey)",
-    "exploit": "secbench-js/set-value.test.js",
-    "ablation": [{"file": "index.js", "old": "if (isUnsafeKey(key)) {", "new": "if (false) {"}]
   }
 ]
