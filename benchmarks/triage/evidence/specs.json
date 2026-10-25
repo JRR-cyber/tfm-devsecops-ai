@@ -173,6 +173,51 @@
     "exploit": "juice-shop/accuracy_property_injection.py"
   },
   {
+    "id": "juice-shop/challengeutils-log-injection",
+    "source": "juice-shop",
+    "finding": {"file": "lib/challengeUtils.ts", "line": 99, "rule": "js/log-injection"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "logger.warn('Missing challenge with name: ' + decodeURIComponent(req.query.challenge)); CRLF in the query forges log lines",
+    "exploit": "juice-shop/forged_log.py"
+  },
+  {
+    "id": "juice-shop/update-reviews-nosql",
+    "source": "juice-shop",
+    "finding": {"file": "routes/updateProductReviews.ts", "line": 18, "rule": "js/sql-injection"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "req.body.id used as the Mongo _id selector in reviewsCollection.update with multi:true; {$ne} rewrites every review (noSqlReviewsChallenge)",
+    "exploit": "juice-shop/update_reviews_nosql.py"
+  },
+  {
+    "id": "juice-shop/profileimage-url-ssrf",
+    "source": "juice-shop",
+    "finding": {"file": "routes/profileImageUrlUpload.ts", "line": 24, "rule": "js/request-forgery"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "fetch(req.body.imageUrl) with no allowlist; the server fetches an attacker-named internal URL (recorded in the access log)",
+    "exploit": "juice-shop/ssrf_image_url.py"
+  },
+  {
+    "id": "juice-shop/profileimage-url-ext-path",
+    "source": "juice-shop",
+    "finding": {"file": "routes/profileImageUrlUpload.ts", "line": 29, "rule": "js/path-injection"},
+    "label": "FP",
+    "evidence": "GATE",
+    "reference": "the write-path extension is sanitized by a 5-value image allowlist (jpg/jpeg/png/svg/gif else jpg); the numeric user id is server-side",
+    "exploit": "juice-shop/profile_image_url_ext_gate.py"
+  },
+  {
+    "id": "juice-shop/profileimage-file-type",
+    "source": "juice-shop",
+    "finding": {"file": "routes/profileImageFileUpload.ts", "line": 42, "rule": "js/http-to-file-access"},
+    "label": "FP",
+    "evidence": "GATE",
+    "reference": "the upload is rejected unless fileType.fromBuffer detects an image/* mime; extension is the detected type and the path uses the numeric user id",
+    "exploit": "juice-shop/profile_image_file_type_gate.py"
+  },
+  {
     "id": "juice-shop/key-server-path",
     "source": "juice-shop",
     "finding": {"file": "routes/keyServer.ts", "line": 14, "rule": "js/path-injection"},

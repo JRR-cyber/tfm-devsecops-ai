@@ -2,6 +2,14 @@
 
 Decisiones de diseño del conjunto experimental, con su motivo y su fecha. Alimenta el capítulo de gestión de proyecto de la memoria (Fase 6). La más reciente arriba.
 
+## D8 — El conjunto de triaje se limita a hallazgos CodeQL con traza de taint (2026-10-25)
+
+**Decisión.** El conjunto de triaje incluye solo hallazgos de **CodeQL con un `codeFlows` de dos o más pasos** (criterio T1 de [`triage-labels.md`](triage-labels.md)). Quedan fuera: los hallazgos de Semgrep, Trivy (SCA/contenedor) y TruffleHog, y los hallazgos de CodeQL de consultas **sin dataflow** (una sola ubicación, sin `codeFlows`).
+
+**Motivo.** La pregunta de investigación (Paso 5.3) es si la **traza de taint** ayuda al agente a decidir; un hallazgo sin traza no permite medir eso y no tiene el formato que consume el agente. Además fija un criterio de inclusión objetivo y reproducible (la presencia de `codeFlows` en el SARIF), en vez de un recorte manual.
+
+**Consecuencia (embudo, medido sobre `unified/findings.sarif` de CI).** En `src/app/juice-shop/` hay 261 hallazgos con huella única; 27 ya estaban etiquetados (Fases previas + CP1–CP5) y de los 234 restantes solo **16** cumplen T1. Los 218 excluidos son: Semgrep/Trivy/TruffleHog, y 39 alertas de CodeQL sin traza —`js/missing-rate-limiting` (×31), `js/sensitive-get-query` (×3), `js/incomplete-sanitization` (×2), `js/file-system-race` (×2), `js/missing-token-validation` (×1)—. Esos 16 son el alcance de CP6. (Las alertas sin traza son datos válidos para el capítulo de resultados como “lo que el pipeline reporta pero el conjunto de triaje no cubre”, no un olvido.)
+
 ## D7 — Estándar de evidencia mixto para acelerar el etiquetado (2026-10-24)
 
 **Decisión.** Mantener la ablación ejecutable (`ABL`) para los casos **no obvios**, y usar un estándar más ligero (`GATE`) para los **FP claros**: citar la guarda en el código y demostrarla con un check reproducible (la entrada maliciosa se rechaza, un control benigno funciona), sin exigir que la ablación llegue hasta el *sink*.

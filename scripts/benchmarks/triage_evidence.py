@@ -108,7 +108,15 @@ def run(spec: dict, ablation: list[dict] | None) -> tuple[bool, str]:
             module_spec = importlib.util.spec_from_file_location("exploit", EVIDENCE / spec["exploit"])
             module = importlib.util.module_from_spec(module_spec)
             module_spec.loader.exec_module(module)
-            return module.exploit(base)
+            ok, detail = module.exploit(base)
+            # Effects visible only in the app's log (e.g. log injection) are checked
+            # against the container's stdout: the exploit sends the payload, then
+            # check_logs(logs) asserts the forged line landed (triage-labels.md s.6).
+            if hasattr(module, "check_logs"):
+                logs = docker("logs", container, check=False)
+                ok_log, detail_log = module.check_logs(logs.stdout + logs.stderr)
+                return ok and ok_log, f"{detail}; logs: {detail_log}"
+            return ok, detail
         finally:
             docker("rm", "-f", container, check=False)
 
