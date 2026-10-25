@@ -146,6 +146,33 @@
     "exploit": "juice-shop/fileserver_nullbyte.py"
   },
   {
+    "id": "juice-shop/redirect-allowlist-typeconfusion",
+    "source": "juice-shop",
+    "finding": {"file": "lib/insecurity.ts", "line": 136, "rule": "js/type-confusion-through-parameter-tampering"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "isRedirectAllowed uses url.includes(allowedUrl), a substring test on the attacker URL; the same open-redirect bypass as redirect.ts:18",
+    "exploit": "juice-shop/redirect_open.py"
+  },
+  {
+    "id": "juice-shop/search-criteria-typeconfusion",
+    "source": "juice-shop",
+    "finding": {"file": "routes/search.ts", "line": 22, "rule": "js/type-confusion-through-parameter-tampering"},
+    "label": "TP",
+    "evidence": "POC",
+    "reference": "criteria = req.query.q is concatenated into the SQL at line 23; the tampered q reaches the injectable query (same sink as search-sqli)",
+    "exploit": "juice-shop/search_sqli.py"
+  },
+  {
+    "id": "juice-shop/accuracy-proto-pollution",
+    "source": "juice-shop",
+    "finding": {"file": "lib/accuracy.ts", "line": 71, "rule": "js/prototype-polluting-assignment"},
+    "label": "FP",
+    "evidence": "GATE",
+    "reference": "solves[challengeKey] assignment; challengeKey reaches storeVerdict only via vulnCode* endpoints, which reject unknown keys (same guard as accuracy:68)",
+    "exploit": "juice-shop/accuracy_property_injection.py"
+  },
+  {
     "id": "juice-shop/key-server-path",
     "source": "juice-shop",
     "finding": {"file": "routes/keyServer.ts", "line": 14, "rule": "js/path-injection"},
