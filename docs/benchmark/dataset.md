@@ -143,7 +143,39 @@ Los casos excluidos no se versionan. Algunas rutas del *sink* son solo el nombre
 
 El objetivo de la hoja de ruta era de 30 a 50 vulnerabilidades.
 
-**En curso:** este conjunto solo tiene vulnerabilidades confirmadas, así que no permite medir la tasa de falsos positivos del triaje. Se está ampliando con hallazgos etiquetados como verdadero o falso positivo (incluidos nuevos casos de Juice Shop sin *codefix*). Los criterios están fijados en [`triage-labels.md`](triage-labels.md).
+### Conjunto de triaje (TP/FP, para la FPR)
+
+El conjunto de remediación anterior solo contiene vulnerabilidades confirmadas, así que no permite medir la tasa de falsos positivos (FPR, Paso 5.2) ni comparar la decisión del agente con y sin traza (Paso 5.3), que es el núcleo de la pregunta de investigación. Para eso se añade un **conjunto de triaje** con hallazgos etiquetados como verdadero positivo (TP), falso positivo (FP) o indeterminado (UNCERTAIN). Vive en [`benchmarks/triage/labels.csv`](../../benchmarks/triage/labels.csv); los criterios, en [`triage-labels.md`](triage-labels.md); el registro de decisiones, en [`decisions.md`](decisions.md).
+
+**Principio: toda etiqueta se apoya en una ejecución, no en la lectura del código** (decisión D2). El script [`scripts/benchmarks/triage_evidence.py`](../../scripts/benchmarks/triage_evidence.py) vuelve a ejecutar la evidencia de cada etiqueta y comprueba que da el resultado que la etiqueta exige; si alguna deja de hacerlo, la etiqueta no es válida.
+
+| Evidencia | Significa |
+|---|---|
+| **OFF** | exploit tomado de un test oficial de OWASP (la verdad de base la aporta el benchmark) → TP |
+| **POC** | exploit propio, versionado, que funciona contra el código tal cual → TP |
+| **ABL** | el exploit falla contra el código y pasa a funcionar al desactivar la guarda citada (ablación) → FP |
+| **GATE** | guarda evidente citada + un check reproducible de que la entrada maliciosa se rechaza (D7) → FP |
+| **UNCERTAIN** | no se puede construir ninguna de las dos pruebas, o el efecto no es observable |
+
+Los exploits de Juice Shop se lanzan por HTTP contra la imagen de contenedor del pipeline (con todos los retos activos); los de SecBench.js, en el arnés Docker contra la versión instalada desde npm (ver [`triage-labels.md`](triage-labels.md), sección 5).
+
+**Alcance (D8).** El triaje se limita a hallazgos de **CodeQL con traza de taint de dos o más pasos** (el mismo criterio C8), porque es lo que permite evaluar la aportación de la traza. Quedan fuera Semgrep, Trivy y TruffleHog, y las alertas de CodeQL sin dataflow (`js/missing-rate-limiting`, `js/sensitive-get-query`…); el embudo concreto (234 hallazgos sin etiquetar → 16 en alcance) está en [`decisions.md`](decisions.md), D8.
+
+**Estado (unidad = vulnerabilidad / `vuln_group`).** Completo:
+
+| Fuente | TP | FP | UNCERTAIN | Total |
+|---|---:|---:|---:|---:|
+| Juice Shop | 17 | 16 | 4 | 37 |
+| SecBench.js (versiones corregidas) | 0 | 6 | 4 | 10 |
+| **Total (grupos)** | **17** | **22** | **8** | **47** |
+
+El CSV tiene **53 filas**: varios resultados de CodeQL comparten `vuln_group` —misma fuente, regla y arreglo— y cuentan una vez en la métrica; por filas el desglose es 20 TP / 25 FP / 8 UNCERTAIN.
+
+- Los **FP de Juice Shop** son guardas reales fuera de la traza: el allowlist de `.md/.pdf`, el middleware `serve-index` sobre los directorios servidos, la validación de claves de los endpoints `vulnCode*`, la verificación de firma antes de `put`, el saneado de extensión de las subidas de imagen, etc.
+- Los **FP de SecBench.js** son las versiones corregidas de los casos vulnerables, que CodeQL sigue marcando pero cuyo arreglo neutraliza el exploit (ablación).
+- Los **UNCERTAIN** reúnen debilidades de calidad sin exploit en tiempo de ejecución (MD5 de contraseñas, `Math.random`, ReDoS polinómico), código que no encaja en el modelo exploit/ablación (hoek, hosted-git-info, la detección de retos de `verify.ts`) y arreglos incompletos retenidos por posible divulgación (`connection-tester`, `dns-sync`; D3). Se informan aparte, con un análisis de sensibilidad (contándolos como TP y como FP).
+
+**Relación con el conjunto de remediación.** Los 17 TP de Juice Shop del triaje incluyen los 3 que ya están en `benchmarks/dataset.csv` (inyecciones de `login`, `search` y `updateProductReviews`) y **14 nuevos** (open redirect, LFR, null-byte, NoSQL de reviews y likes, SSRF, inyección de logs, confusión de tipos, fuga de campos sensibles, JWT forjado…). Incorporar esos 14 al conjunto de remediación ([`triage-labels.md`](triage-labels.md), sección 8) es un paso **deliberado**: cambia la N de la Fase 5 y exige fijar la corrección de referencia de cada uno (el *codefix* cuando existe, o la validación por re-escaneo + exploit en la Fase 4). Se decide por separado y todavía no se ha aplicado.
 
 ## 6. Reproducción
 
@@ -185,7 +217,7 @@ Notas del entorno:
 
 - **Clases desequilibradas.** Command-injection aporta 12 casos y code-injection solo 2. El análisis por categoría de la Fase 5 es exploratorio. Para la comparación global entre estrategias de prompting se usan los 33 casos con medidas repetidas.
 - **Sesgo de selección hacia lo que CodeQL modela.** C8 deja dentro solo las vulnerabilidades que CodeQL sabe seguir. En las librerías, eso significa consultas que tratan los parámetros de las funciones exportadas como fuente (`js/shell-command-constructed-from-input`, `js/prototype-pollution-utility`, `js/unsafe-code-construction`…). Los resultados de la Fase 5 describen el rendimiento del sistema **sobre vulnerabilidades con traza**, no sobre cualquier vulnerabilidad. Es coherente con la pregunta de investigación (el valor de la traza), pero debe decirse así en la memoria.
-- **Juice Shop aporta solo 3 casos.** Son las vulnerabilidades más documentadas públicamente (inyecciones SQL de un benchmark conocido desde 2014), justo las que más riesgo de memorización tienen. La prueba de control de memorización (Paso 5.3) tendrá poco poder sobre Juice Shop. Los 30 casos de SecBench.js son paquetes npm poco conocidos.
+- **Juice Shop aporta solo 3 casos al conjunto de remediación.** Son las vulnerabilidades más documentadas públicamente (inyecciones SQL de un benchmark conocido desde 2014), justo las que más riesgo de memorización tienen. La prueba de control de memorización (Paso 5.3) tendrá poco poder sobre esos 3. Lo mitiga el conjunto de triaje (§5.1): aporta 14 TP más de Juice Shop —varios sin *codefix* ni *writeup* público— y 22 FP, 6 de ellos de versiones corregidas de paquetes npm poco conocidos de SecBench.js, menos memorizables.
 - **Regresión funcional en SecBench.js.** Los paquetes de npm no suelen incluir sus tests, así que el oráculo de seguridad (el exploit) no comprueba que el parche mantenga la funcionalidad. Hay que resolverlo antes de la Fase 4. Opciones: tests del repositorio original en la etiqueta de la versión, o pruebas diferenciales contra la versión corregida.
 - **Path traversal** queda con 3 casos, porque la clase tiene muy pocos casos con corrección de referencia (12 de 170).
 - **Muestreo.** Una muestra estratificada no es representativa de la distribución original de SecBench.js, dominada por prototype pollution. Es una decisión deliberada para cubrir todas las clases.
