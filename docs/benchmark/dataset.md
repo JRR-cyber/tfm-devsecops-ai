@@ -2,7 +2,10 @@
 
 Este documento describe cómo se construye el conjunto de vulnerabilidades sobre el que se evalúa el pipeline en la Fase 5: qué fuentes se usan, qué criterios de selección se aplican y cuántos casos supera cada uno.
 
-**Resultado:** 33 vulnerabilidades, listadas en [`benchmarks/dataset.csv`](../../benchmarks/dataset.csv). Son 30 de SecBench.js y 3 de Juice Shop, y todas tienen un hallazgo de CodeQL con traza de taint completa.
+**Resultado.** El dataset tiene dos conjuntos complementarios, ambos construidos sobre hallazgos de CodeQL con traza de taint completa:
+
+- **Remediación** ([`benchmarks/dataset.csv`](../../benchmarks/dataset.csv)): 33 vulnerabilidades confirmadas (30 de SecBench.js y 3 de Juice Shop), para medir la tasa de éxito de la remediación (RSR).
+- **Triaje** ([`benchmarks/triage/labels.csv`](../../benchmarks/triage/labels.csv), §5.1): 47 grupos etiquetados como verdadero positivo, falso positivo o indeterminado (17 TP de Juice Shop —14 de ellos nuevos—, 16 FP y 4 indeterminados de Juice Shop; 6 FP y 4 indeterminados de SecBench.js), para medir la tasa de falsos positivos (FPR) y la aportación de la traza. Toda etiqueta se respalda con evidencia ejecutable.
 
 ## 1. Decisión de fuentes
 
