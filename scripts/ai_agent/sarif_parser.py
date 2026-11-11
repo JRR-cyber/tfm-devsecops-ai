@@ -139,16 +139,22 @@ class SourceReader:
         self.root = root.resolve() if root else None
         self._cache: dict[str, list[str] | None] = {}
 
-    def snippet(self, uri: str, start: int, end: int) -> str | None:
-        if not self.root or start < 1:
-            return None
+    def lines(self, uri: str) -> list[str] | None:
+        """All lines of a repo file (cached), or None if it cannot be read."""
         if uri not in self._cache:
+            if not self.root:
+                return None
             path = (self.root / uri).resolve()
             ok = path.is_file() and path.is_relative_to(self.root)
             self._cache[uri] = (
                 path.read_text(encoding="utf-8", errors="replace").splitlines() if ok else None
             )
-        lines = self._cache[uri]
+        return self._cache[uri]
+
+    def snippet(self, uri: str, start: int, end: int) -> str | None:
+        if start < 1:
+            return None
+        lines = self.lines(uri)
         if not lines or start > len(lines):
             return None
         end = min(max(end, start), start + MAX_SNIPPET_LINES - 1, len(lines))

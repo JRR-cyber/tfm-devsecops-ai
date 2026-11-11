@@ -67,9 +67,9 @@ class TriageVerdict:
 
 
 def build_prompt(finding: Finding, reader: SourceReader | None = None,
-                 with_trace: bool = True) -> tuple[str, str]:
+                 with_trace: bool = True, with_rag: bool = False) -> tuple[str, str]:
     """Return (system, user) for the triage decision on a finding."""
-    context = render_context(finding, reader, with_trace=with_trace)
+    context = render_context(finding, reader, with_trace=with_trace, with_rag=with_rag)
     return SYSTEM_PROMPT, USER_TEMPLATE.format(context=context)
 
 
@@ -99,12 +99,12 @@ def parse_verdict(text: str, with_trace: bool) -> TriageVerdict:
 
 
 def decide(finding: Finding, client, reader: SourceReader | None = None,
-           with_trace: bool = True) -> TriageVerdict:
+           with_trace: bool = True, with_rag: bool = False) -> TriageVerdict:
     """Build the prompt, ask the model, and parse its triage verdict.
 
     ``client`` is a GroqClient (or anything with ``.complete(system, user)``).
     """
-    system, user = build_prompt(finding, reader, with_trace=with_trace)
+    system, user = build_prompt(finding, reader, with_trace=with_trace, with_rag=with_rag)
     reply = client.complete(system, user)
     return parse_verdict(reply.text, with_trace=with_trace)
 
@@ -119,6 +119,7 @@ def main() -> None:
     parser.add_argument("--fingerprint", required=True, help="tfmContextHash/v1 of the finding")
     parser.add_argument("--repo-root", type=Path, default=Path("."))
     parser.add_argument("--no-trace", action="store_true", help="blind condition (omit the trace)")
+    parser.add_argument("--rag", action="store_true", help="add the lightweight RAG context (3.5)")
     parser.add_argument("--run", action="store_true", help="call Groq for a live decision")
     args = parser.parse_args()
 
@@ -132,14 +133,14 @@ def main() -> None:
 
     reader = SourceReader(args.repo_root)
     with_trace = not args.no_trace
-    system, user = build_prompt(target, reader, with_trace=with_trace)
+    system, user = build_prompt(target, reader, with_trace=with_trace, with_rag=args.rag)
 
     if args.run:
         from groq_client import GroqClient
-        verdict = decide(target, GroqClient(), reader, with_trace=with_trace)
+        verdict = decide(target, GroqClient(), reader, with_trace=with_trace, with_rag=args.rag)
         print(json.dumps({
             "fingerprint": target.fingerprint, "rule": target.rule_id,
-            "with_trace": verdict.with_trace, "verdict": verdict.verdict,
+            "with_trace": verdict.with_trace, "with_rag": args.rag, "verdict": verdict.verdict,
             "confidence": verdict.confidence, "rationale": verdict.rationale,
         }, indent=1, ensure_ascii=False))
     else:

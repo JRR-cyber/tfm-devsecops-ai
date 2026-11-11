@@ -29,7 +29,7 @@ GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "openai/gpt-oss-120b"   # single fixed model (Llama 3.3 70B retired by Groq 2026-08-16)
 DEFAULT_TEMPERATURE = 0.0           # deterministic by default, for reproducible triage
 DEFAULT_TIMEOUT = 60
-MAX_RETRIES = 3
+MAX_RETRIES = 5
 # api.groq.com sits behind Cloudflare, which blocks urllib's default User-Agent
 # with HTTP 403 "error code: 1010". A plain, non-default UA passes.
 USER_AGENT = "Mozilla/5.0 (compatible; tfm-devsecops-ai/1.0)"
@@ -98,7 +98,14 @@ class GroqClient:
             except urllib.error.HTTPError as err:
                 last_error = err
                 if err.code in (429, 500, 502, 503, 504) and attempt < MAX_RETRIES - 1:
-                    time.sleep(2 ** attempt)
+                    # On 429 Groq sends Retry-After (seconds); honour it instead of
+                    # a short fixed backoff, so batch runs self-pace to the limit.
+                    retry_after = err.headers.get("Retry-After") if err.headers else None
+                    try:
+                        delay = float(retry_after)
+                    except (TypeError, ValueError):
+                        delay = 2 ** attempt
+                    time.sleep(min(delay, 30))
                     continue
                 detail = err.read().decode("utf-8", "replace")[:500]
                 raise GroqError(f"Groq HTTP {err.code}: {detail}") from err

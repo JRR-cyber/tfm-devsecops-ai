@@ -37,7 +37,7 @@ reproducible" del plan.
 | 3.2 | Parser del SARIF unificado (fichero, línea, regla, snippet, `codeFlows`, fingerprint, severidad) | **hecho** — `sarif_parser.py` |
 | 3.3 | Filtro CVSS ≥ 7.0 + mapeo documentado de severidad Semgrep | **hecho** — `severity.py` |
 | 3.4 | Traza de taint como contexto estructurado; decisión FP a partir de la traza | **hecho** — `trace_context.py`, `triage.py` |
-| 3.5 | RAG ligero (imports y funciones relacionadas del fichero vulnerable) | pendiente |
+| 3.5 | RAG ligero (imports y funciones relacionadas del fichero vulnerable) | **hecho** — `context_rag.py` |
 | 3.6 | Prompts zero-shot / few-shot / CoT; parche como diff | pendiente |
 | 3.7 | Rama `fix/ai-remediation-...` + PR | pendiente |
 
@@ -58,6 +58,15 @@ reproducible" del plan.
 - **`trace_context.py`** — renderiza un `Finding` y su traza de taint como texto
   estructurado para el prompt (Paso 3.4). La traza es un bloque **separable**:
   `render_context(..., with_trace=False)` da la condición ciega de la Fase 5.3.
+  `render_context` tiene también `with_rag` para añadir el bloque de 3.5.
+- **`context_rag.py`** — RAG ligero (Paso 3.5): extrae estáticamente (sin
+  embeddings) los imports, la **función que envuelve el *sink*** y las funciones
+  hermanas que llama, para que el modelo vea mitigaciones que están *fuera* de la
+  traza (p. ej. la guarda de `keyServer.ts:13`). Bloque separable, como la traza.
+- **`evaluate.py`** — probe de desarrollo (NO el experimento de Fase 5): corre el
+  triaje sobre el conjunto etiquetado en varios modos (`notrace` / `trace` /
+  `trace+rag`) y mide el acuerdo con `labels.csv`. Para cazar bugs y ver el efecto
+  de la traza y el RAG, no para reportar resultados.
 - **`triage.py`** — decisión de triaje con el LLM (Paso 3.4): construye el prompt,
   llama a Groq y parsea el veredicto **TP / FP / UNCERTAIN** (mismo vocabulario que
   `benchmarks/triage/labels.csv`, para evaluarlo en la Fase 5).

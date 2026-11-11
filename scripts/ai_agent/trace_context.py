@@ -34,11 +34,13 @@ def render_trace(finding: Finding, reader: SourceReader | None = None) -> str:
 
 
 def render_context(finding: Finding, reader: SourceReader | None = None,
-                   with_trace: bool = True) -> str:
+                   with_trace: bool = True, with_rag: bool = False) -> str:
     """Structured description of a finding for the triage prompt.
 
-    With ``with_trace=False`` the taint trace is omitted and nothing else changes;
-    that is the blind condition of the Phase 5.3 control.
+    ``with_trace`` and ``with_rag`` toggle the two optional context blocks (the
+    taint trace and the lightweight RAG). Everything else is fixed, so turning
+    either off changes only that block — the separable inputs Phase 5 compares
+    (``with_trace=False`` is the blind control of 5.3).
     """
     parts = [
         f"Rule: {finding.rule_id}",
@@ -55,4 +57,9 @@ def render_context(finding: Finding, reader: SourceReader | None = None,
         trace = render_trace(finding, reader)
         if trace:
             parts.append(trace)
+    if with_rag:
+        from context_rag import render_rag
+        rag = render_rag(finding, reader)
+        if rag:
+            parts.append("Surrounding code (imports and related functions):\n" + rag)
     return "\n\n".join(parts)
