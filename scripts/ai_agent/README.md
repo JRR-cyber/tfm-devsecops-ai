@@ -38,7 +38,7 @@ reproducible" del plan.
 | 3.3 | Filtro CVSS ≥ 7.0 + mapeo documentado de severidad Semgrep | **hecho** — `severity.py` |
 | 3.4 | Traza de taint como contexto estructurado; decisión FP a partir de la traza | **hecho** — `trace_context.py`, `triage.py` |
 | 3.5 | RAG ligero (imports y funciones relacionadas del fichero vulnerable) | **hecho** — `context_rag.py` |
-| 3.6 | Prompts zero-shot / few-shot / CoT; parche como diff | pendiente |
+| 3.6 | Prompts zero-shot / few-shot / CoT; parche como diff | **hecho** — `strategies.py`, `remediate.py` |
 | 3.7 | Rama `fix/ai-remediation-...` + PR | pendiente |
 
 ## Módulos
@@ -63,6 +63,17 @@ reproducible" del plan.
   embeddings) los imports, la **función que envuelve el *sink*** y las funciones
   hermanas que llama, para que el modelo vea mitigaciones que están *fuera* de la
   traza (p. ej. la guarda de `keyServer.ts:13`). Bloque separable, como la traza.
+- **`strategies.py`** — las tres estrategias de prompting (Paso 3.6) como
+  transformaciones del prompt, agnósticas a la tarea: `zero-shot` (directo),
+  `few-shot` (antepone ejemplos), `cot` (pide razonar paso a paso). La estrategia
+  no toca el contexto del hallazgo (traza/RAG): esas son las constantes.
+- **`remediate.py`** — genera el parche como **diff unificado** (Paso 3.6) para un
+  TP de CVSS ≥ 7. Mismo contexto estructurado que el triaje (+ RAG por defecto,
+  no se parchea lo que no se ve) y las mismas estrategias. Generar el diff es el
+  entregable; aplicarlo y el bucle reflexivo son Fase 4.
+  ```bash
+  GROQ_API_KEY=... python scripts/ai_agent/remediate.py unified/findings.sarif --fingerprint <fp> --repo-root . --strategy cot --run
+  ```
 - **`evaluate.py`** — probe de desarrollo (NO el experimento de Fase 5): corre el
   triaje sobre el conjunto etiquetado en varios modos (`notrace` / `trace` /
   `trace+rag`) y mide el acuerdo con `labels.csv`. Para cazar bugs y ver el efecto

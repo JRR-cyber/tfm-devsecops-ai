@@ -26,9 +26,31 @@ import re
 from dataclasses import dataclass
 
 from sarif_parser import Finding, SourceReader
+from strategies import STRATEGIES, ZERO_SHOT, decorate
 from trace_context import render_context
 
 VERDICTS = ("TP", "FP", "UNCERTAIN")
+
+# Fixed few-shot exemplars for the triage task (used only by the few-shot
+# strategy). Kept short and generic so they teach the output shape and the
+# guard-aware reasoning without leaking the benchmark's own cases.
+TRIAGE_EXAMPLES: list[tuple[str, str]] = [
+    (
+        "Rule: js/sql-injection\nLocation: routes/item.ts:12\n"
+        "Flagged code:\n  db.query('SELECT * FROM items WHERE id = ' + req.query.id)\n"
+        "Taint trace (source -> sink), 2 steps:\n  1. [source] req.query.id\n  2. [sink] db.query(...)",
+        '{"verdict": "TP", "confidence": 0.95, "rationale": "req.query.id is concatenated '
+        'into the SQL string with no parameterisation or validation, so it is injectable."}',
+    ),
+    (
+        "Rule: js/path-injection\nLocation: routes/file.ts:20\n"
+        "Flagged code:\n  res.sendFile(path.resolve('public/', name))\n"
+        "Surrounding code:\n  if (name.includes('/')) return res.status(400).end()\n"
+        "  res.sendFile(path.resolve('public/', name))",
+        '{"verdict": "FP", "confidence": 0.9, "rationale": "A guard rejects any name '
+        "containing '/', so '../' cannot reach the sink and traversal is blocked.\"}",
+    ),
+]
 
 SYSTEM_PROMPT = """\
 You are a security triage analyst reviewing static-analysis findings for a code \
@@ -67,10 +89,12 @@ class TriageVerdict:
 
 
 def build_prompt(finding: Finding, reader: SourceReader | None = None,
-                 with_trace: bool = True, with_rag: bool = False) -> tuple[str, str]:
+                 with_trace: bool = True, with_rag: bool = False,
+                 strategy: str = ZERO_SHOT) -> tuple[str, str]:
     """Return (system, user) for the triage decision on a finding."""
     context = render_context(finding, reader, with_trace=with_trace, with_rag=with_rag)
-    return SYSTEM_PROMPT, USER_TEMPLATE.format(context=context)
+    system, user = SYSTEM_PROMPT, USER_TEMPLATE.format(context=context)
+    return decorate(system, user, strategy, TRIAGE_EXAMPLES)
 
 
 def parse_verdict(text: str, with_trace: bool) -> TriageVerdict:
@@ -99,12 +123,14 @@ def parse_verdict(text: str, with_trace: bool) -> TriageVerdict:
 
 
 def decide(finding: Finding, client, reader: SourceReader | None = None,
-           with_trace: bool = True, with_rag: bool = False) -> TriageVerdict:
+           with_trace: bool = True, with_rag: bool = False,
+           strategy: str = ZERO_SHOT) -> TriageVerdict:
     """Build the prompt, ask the model, and parse its triage verdict.
 
     ``client`` is a GroqClient (or anything with ``.complete(system, user)``).
     """
-    system, user = build_prompt(finding, reader, with_trace=with_trace, with_rag=with_rag)
+    system, user = build_prompt(finding, reader, with_trace=with_trace,
+                                with_rag=with_rag, strategy=strategy)
     reply = client.complete(system, user)
     return parse_verdict(reply.text, with_trace=with_trace)
 
@@ -120,6 +146,8 @@ def main() -> None:
     parser.add_argument("--repo-root", type=Path, default=Path("."))
     parser.add_argument("--no-trace", action="store_true", help="blind condition (omit the trace)")
     parser.add_argument("--rag", action="store_true", help="add the lightweight RAG context (3.5)")
+    parser.add_argument("--strategy", default=ZERO_SHOT, choices=STRATEGIES,
+                        help="prompting strategy (3.6)")
     parser.add_argument("--run", action="store_true", help="call Groq for a live decision")
     args = parser.parse_args()
 
@@ -133,15 +161,18 @@ def main() -> None:
 
     reader = SourceReader(args.repo_root)
     with_trace = not args.no_trace
-    system, user = build_prompt(target, reader, with_trace=with_trace, with_rag=args.rag)
+    system, user = build_prompt(target, reader, with_trace=with_trace,
+                                with_rag=args.rag, strategy=args.strategy)
 
     if args.run:
         from groq_client import GroqClient
-        verdict = decide(target, GroqClient(), reader, with_trace=with_trace, with_rag=args.rag)
+        verdict = decide(target, GroqClient(), reader, with_trace=with_trace,
+                         with_rag=args.rag, strategy=args.strategy)
         print(json.dumps({
             "fingerprint": target.fingerprint, "rule": target.rule_id,
-            "with_trace": verdict.with_trace, "with_rag": args.rag, "verdict": verdict.verdict,
-            "confidence": verdict.confidence, "rationale": verdict.rationale,
+            "with_trace": verdict.with_trace, "with_rag": args.rag, "strategy": args.strategy,
+            "verdict": verdict.verdict, "confidence": verdict.confidence,
+            "rationale": verdict.rationale,
         }, indent=1, ensure_ascii=False))
     else:
         print("===== SYSTEM =====\n" + system)
