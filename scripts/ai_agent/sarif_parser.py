@@ -57,7 +57,7 @@ def cwes_from_tags(tags: list[str]) -> list[str]:
     out: list[str] = []
     for tag in tags:
         for num in CWE_RE.findall(tag):
-            cwe = f"CWE-{num}"
+            cwe = f"CWE-{int(num)}"   # strip leading zeros: cwe-089 -> CWE-89 (labels.csv style)
             if cwe not in out:
                 out.append(cwe)
     return out
@@ -89,6 +89,15 @@ class Finding:
     cwes: list[str] = field(default_factory=list)
     code_flows: list[list[CodeFlowStep]] = field(default_factory=list)
     snippet: str | None = None
+
+    @property
+    def label_key(self) -> str:
+        """Bare fingerprint digest (no ``:occurrence``) — the key used in
+        ``benchmarks/triage/labels.csv``. The full fingerprint keeps the
+        occurrence index for pre/post-patch matching (Fase 4); the ground-truth
+        triage labels are keyed on the digest alone (a ``vuln_group``), so this
+        is what you join on to evaluate the triage decision (Fase 5)."""
+        return self.fingerprint.split(":")[0]
 
     @property
     def has_trace(self) -> bool:

@@ -5,11 +5,29 @@ Agente híbrido del pipeline: lee el SARIF unificado que produce CI
 hallazgo apoyándose en la traza de taint de CodeQL y, para los de severidad alta,
 propone un parche y abre un PR para revisión humana (postura asistiva).
 
-Diseño fijo del roadmap (no sustituir sin pedirlo): un solo modelo —Llama 3.3 70B
-en Groq—, los experimentos comparan *estrategias de prompting* (zero-shot /
-few-shot / CoT); auto-remediación solo para CVSS ≥ 7.0; emparejamiento pre/post
-parche por `partialFingerprints`, nunca por línea; el agente no corre en
-`pull_request_target`.
+Diseño fijo del roadmap (no sustituir sin pedirlo): un solo modelo en Groq
+(ver "Decisión de modelo" abajo), los experimentos comparan *estrategias de
+prompting* (zero-shot / few-shot / CoT); auto-remediación solo para CVSS ≥ 7.0;
+emparejamiento pre/post parche por `partialFingerprints`, nunca por línea; el
+agente no corre en `pull_request_target`.
+
+## Decisión de modelo
+
+**Modelo único fijado: `openai/gpt-oss-120b` en Groq.** El roadmap fijaba
+*Llama 3.3 70B en Groq*, pero **Groq retiró ese modelo el 16-08-2026** (y toda la
+familia Llama de chat; en el *free tier* solo quedan `gpt-oss-*`, `qwen3`, Whisper
+y los clasificadores Prompt Guard, que no sirven para generación). Ante el
+conflicto entre las dos decisiones fijas (proveedor = Groq, modelo = Llama 3.3
+70B), se conserva **Groq** y se cambia al modelo abierto más capaz de su catálogo
+actual, `openai/gpt-oss-120b`.
+
+No afecta a la pregunta de investigación: el experimento es *within-subject*
+(con/sin traza y zero/few/CoT con el **modelo fijo**), así que lo que se mide es la
+diferencia entre condiciones dentro del mismo modelo; el modelo es la constante
+controlada, no la variable. La única consecuencia es de **validez externa** (los
+resultados aplican a este modelo), que se declara en Amenazas a la validez. Se
+mantiene un modelo open-weights, coherente con la premisa de "modelo asequible y
+reproducible" del plan.
 
 ## Estado por paso
 
@@ -18,7 +36,7 @@ parche por `partialFingerprints`, nunca por línea; el agente no corre en
 | 3.1 | Cliente Groq (clave `GROQ_API_KEY`) | **hecho** — `groq_client.py` |
 | 3.2 | Parser del SARIF unificado (fichero, línea, regla, snippet, `codeFlows`, fingerprint, severidad) | **hecho** — `sarif_parser.py` |
 | 3.3 | Filtro CVSS ≥ 7.0 + mapeo documentado de severidad Semgrep | **hecho** — `severity.py` |
-| 3.4 | Traza de taint como contexto estructurado; decisión FP a partir de la traza | pendiente |
+| 3.4 | Traza de taint como contexto estructurado; decisión FP a partir de la traza | **hecho** — `trace_context.py`, `triage.py` |
 | 3.5 | RAG ligero (imports y funciones relacionadas del fichero vulnerable) | pendiente |
 | 3.6 | Prompts zero-shot / few-shot / CoT; parche como diff | pendiente |
 | 3.7 | Rama `fix/ai-remediation-...` + PR | pendiente |
@@ -36,6 +54,18 @@ parche por `partialFingerprints`, nunca por línea; el agente no corre en
   SARIF, por eso vive aparte del parser. Ver "Mapeo de severidad" abajo.
   ```bash
   python scripts/ai_agent/severity.py unified/findings.sarif
+  ```
+- **`trace_context.py`** — renderiza un `Finding` y su traza de taint como texto
+  estructurado para el prompt (Paso 3.4). La traza es un bloque **separable**:
+  `render_context(..., with_trace=False)` da la condición ciega de la Fase 5.3.
+- **`triage.py`** — decisión de triaje con el LLM (Paso 3.4): construye el prompt,
+  llama a Groq y parsea el veredicto **TP / FP / UNCERTAIN** (mismo vocabulario que
+  `benchmarks/triage/labels.csv`, para evaluarlo en la Fase 5).
+  ```bash
+  # offline: solo imprime el prompt (con o sin traza)
+  python scripts/ai_agent/triage.py unified/findings.sarif --fingerprint <fp> --repo-root . [--no-trace]
+  # en vivo: decisión real (necesita GROQ_API_KEY)
+  GROQ_API_KEY=... python scripts/ai_agent/triage.py unified/findings.sarif --fingerprint <fp> --repo-root . --run
   ```
 - **`groq_client.py`** — cliente mínimo (solo biblioteca estándar) del endpoint
   compatible con OpenAI de Groq. Modelo fijo, clave desde el entorno.
@@ -106,3 +136,24 @@ rota, no se parchea)— se reportan/escalan, no se auto-remedian.
 traza** (el conjunto candidato a remediación). Desglose de los ≥ 7: CodeQL 197
 (91 con traza), Trivy-fs 79, Trivy-image 60, Semgrep 44 (todos del nivel `error`),
 TruffleHog 14.
+
+## Decisión de triaje y traza separable (3.4)
+
+`triage.py` pide al LLM decidir si un hallazgo es **TP / FP / UNCERTAIN** —el mismo
+vocabulario que `benchmarks/triage/labels.csv`, para evaluarlo contra esa verdad
+de base en la Fase 5 (el join es por `fingerprint`, no por ruta)—. El prompt lleva
+el contexto estructurado del hallazgo (regla, CWE, ubicación, código marcado) y, si
+procede, la **traza de taint** (`trace_context.py`): la lista fuente → … → *sink*
+con la línea de código de cada paso.
+
+**Traza separable (control de la Fase 5.3).** `render_context(..., with_trace=…)`
+construye el mismo contexto con o sin el bloque de traza. El system prompt es
+**idéntico** en ambas condiciones, así que la única variable que cambia entre
+"con traza" y "ciego" es la presencia del flujo fuente → *sink*. Solo CodeQL tiene
+traza (D8), así que la condición "con traza" solo existe para hallazgos de CodeQL.
+
+**Robustez.** La temperatura es 0 (determinista). El veredicto se pide como un
+único objeto JSON; `parse_verdict` lo extrae aunque el modelo añada prosa, y cae a
+`UNCERTAIN` si no hay nada parseable. La respuesta cruda se conserva (`raw`) para
+auditoría. La decisión en vivo (`decide` / `--run`) necesita `GROQ_API_KEY`; el
+renderizado del prompt y el parseo funcionan sin clave y están probados.

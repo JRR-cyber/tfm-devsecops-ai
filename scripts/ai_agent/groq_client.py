@@ -1,8 +1,11 @@
 """Minimal Groq chat client for the agent (Paso 3.1).
 
-The thesis fixes a single model (Llama 3.3 70B on Groq); the experiments compare
-*prompting strategies* (zero-shot / few-shot / CoT), not models, so the model id
-is a constant here on purpose, not a parameter.
+The thesis fixes a single model on Groq; the experiments compare *prompting
+strategies* (zero-shot / few-shot / CoT), not models, so the model id is a
+constant here on purpose, not a parameter. The roadmap's original model, Llama
+3.3 70B, was retired by Groq on 2026-08-16, so the fixed model is now
+``openai/gpt-oss-120b`` (open-weights, the most capable general model on Groq's
+current line-up). See README "Decisión de modelo".
 
 This talks to Groq's OpenAI-compatible endpoint over the standard library only
 (no new dependency to pin), so the agent stays reproducible from a clean Python.
@@ -23,10 +26,13 @@ import urllib.request
 from dataclasses import dataclass
 
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
-MODEL = "llama-3.3-70b-versatile"   # the single model fixed by the roadmap
+MODEL = "openai/gpt-oss-120b"   # single fixed model (Llama 3.3 70B retired by Groq 2026-08-16)
 DEFAULT_TEMPERATURE = 0.0           # deterministic by default, for reproducible triage
 DEFAULT_TIMEOUT = 60
 MAX_RETRIES = 3
+# api.groq.com sits behind Cloudflare, which blocks urllib's default User-Agent
+# with HTTP 403 "error code: 1010". A plain, non-default UA passes.
+USER_AGENT = "Mozilla/5.0 (compatible; tfm-devsecops-ai/1.0)"
 
 
 class GroqError(RuntimeError):
@@ -81,6 +87,8 @@ class GroqClient:
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": USER_AGENT,
                 },
             )
             try:
@@ -100,6 +108,21 @@ class GroqClient:
                     time.sleep(2 ** attempt)
                     continue
         raise GroqError(f"Groq request failed after {MAX_RETRIES} attempts: {last_error}")
+
+    def list_models(self) -> list[str]:
+        """Model ids this key can access (GET /models), to resolve the right id."""
+        request = urllib.request.Request(
+            GROQ_ENDPOINT.replace("/chat/completions", "/models"),
+            headers={"Authorization": f"Bearer {self.api_key}",
+                     "Accept": "application/json", "User-Agent": USER_AGENT},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                data = json.load(response)
+        except urllib.error.HTTPError as err:
+            detail = err.read().decode("utf-8", "replace")[:500]
+            raise GroqError(f"Groq HTTP {err.code}: {detail}") from err
+        return sorted(m.get("id", "") for m in data.get("data", []))
 
     def _parse(self, data: dict) -> Completion:
         try:
@@ -131,8 +154,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--selftest", action="store_true",
                         help="send one tiny request to verify the key and connectivity")
+    parser.add_argument("--models", action="store_true",
+                        help="list the model ids this key can access")
     args = parser.parse_args()
-    if args.selftest:
+    if args.models:
+        for model_id in GroqClient().list_models():
+            print(model_id)
+    elif args.selftest:
         _selftest()
     else:
         parser.print_help()
