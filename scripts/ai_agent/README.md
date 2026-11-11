@@ -17,7 +17,7 @@ parche por `partialFingerprints`, nunca por línea; el agente no corre en
 |---|---|---|
 | 3.1 | Cliente Groq (clave `GROQ_API_KEY`) | **hecho** — `groq_client.py` |
 | 3.2 | Parser del SARIF unificado (fichero, línea, regla, snippet, `codeFlows`, fingerprint, severidad) | **hecho** — `sarif_parser.py` |
-| 3.3 | Filtro CVSS ≥ 7.0 + mapeo documentado de severidad Semgrep | pendiente |
+| 3.3 | Filtro CVSS ≥ 7.0 + mapeo documentado de severidad Semgrep | **hecho** — `severity.py` |
 | 3.4 | Traza de taint como contexto estructurado; decisión FP a partir de la traza | pendiente |
 | 3.5 | RAG ligero (imports y funciones relacionadas del fichero vulnerable) | pendiente |
 | 3.6 | Prompts zero-shot / few-shot / CoT; parche como diff | pendiente |
@@ -30,6 +30,12 @@ parche por `partialFingerprints`, nunca por línea; el agente no corre en
   abajo). No filtra ni triaje: solo parsea.
   ```bash
   python scripts/ai_agent/sarif_parser.py unified/findings.sarif --repo-root . [--json]
+  ```
+- **`severity.py`** — asigna a cada `Finding` una puntuación comparable con CVSS
+  (0–10) y aplica el filtro ≥ 7.0 (Paso 3.3). Es *política*, no un hecho del
+  SARIF, por eso vive aparte del parser. Ver "Mapeo de severidad" abajo.
+  ```bash
+  python scripts/ai_agent/severity.py unified/findings.sarif
   ```
 - **`groq_client.py`** — cliente mínimo (solo biblioteca estándar) del endpoint
   compatible con OpenAI de Groq. Modelo fijo, clave desde el entorno.
@@ -61,3 +67,42 @@ hallazgos — codeql 345 (231 con traza ≥2 pasos, los 345 con CVSS), semgrep 4
 (0 con CVSS, pendientes de mapeo), trivy-fs 125, trivy-image 124, trufflehog 14.
 Solo CodeQL aporta traza, lo que fija que la decisión FP basada en traza (3.4) es
 exclusiva de CodeQL (decisión D8 del dataset).
+
+## Mapeo de severidad (3.3)
+
+El roadmap solo auto-remedia hallazgos con **CVSS ≥ 7.0**; el resto se reportan.
+Para aplicar un único umbral a herramientas que expresan la severidad de forma
+distinta, `severity.py` reduce cada hallazgo a un número en la escala CVSS 0–10:
+
+| Herramienta | Fuente del número | Mapeo |
+|---|---|---|
+| CodeQL | `security-severity` (ya es CVSS) | se usa tal cual |
+| Trivy (fs/image) | `security-severity` (ya es CVSS) | se usa tal cual |
+| Semgrep | no da número, solo nivel | `error`→8.0 (High), `warning`→5.0 (Medium), `note`→2.0 (Low) |
+| TruffleHog | secreto embebido (CWE-798) | constante 9.0 (Critical) |
+
+**Decisión (mapeo Semgrep→CVSS).** Se usa la *escala cualitativa de severidad de
+CVSS v3.1* (None 0.0 · Low 0.1–3.9 · Medium 4.0–6.9 · High 7.0–8.9 · Critical
+9.0–10.0) y se asigna a cada nivel de Semgrep el valor representativo de su banda.
+El nivel SARIF de Semgrep viene de su severidad interna (ERROR/WARNING/INFO):
+`ERROR` es el nivel que Semgrep reserva a las reglas de seguridad "que deben
+corregirse", así que se trata como **High** y es el **único** nivel que cruza el
+umbral de ≥ 7. No se usa la confianza (`LOW CONFIDENCE`, `precision`) para
+modular el número: se deja el criterio reproducible y defendible (nivel → banda),
+y la confianza queda como contexto para el LLM en 3.4, no como parte del filtro.
+El campo `Score.source` deja trazado de dónde salió cada número
+(`tool` / `semgrep-level-map` / `trufflehog-constant`), para auditoría.
+
+**Alcance del filtro vs. alcance de la auto-remediación.** `severity.py` clasifica
+*todos* los hallazgos por severidad; es solo la capa de severidad. **Qué se
+auto-remedia** se decide al componer con 3.4: el candidato real a remediación es
+`CVSS ≥ 7` **∩ con traza** (es decir, CodeQL), porque es lo único sobre lo que la
+decisión FP por traza y el parche por diff pueden actuar. Los demás altos
+—Semgrep (patrón sin traza), Trivy (CVE de dependencia) y TruffleHog (secreto, se
+rota, no se parchea)— se reportan/escalan, no se auto-remedian.
+
+**Distribución medida** (artefacto `unified-findings` de CI, run 40745100452 sobre
+`main`): de 1094 hallazgos, **394 cruzan CVSS ≥ 7**, pero solo **91 son CodeQL con
+traza** (el conjunto candidato a remediación). Desglose de los ≥ 7: CodeQL 197
+(91 con traza), Trivy-fs 79, Trivy-image 60, Semgrep 44 (todos del nivel `error`),
+TruffleHog 14.
