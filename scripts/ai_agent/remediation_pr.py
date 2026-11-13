@@ -128,44 +128,57 @@ def _git(args: list[str], repo_root: Path) -> subprocess.CompletedProcess:
 
 
 def prepare_pr(finding: Finding, diff: str, repo_root: Path, verdict: str | None = None,
-               commit: bool = False, open_pr: bool = False) -> str:
+               commit: bool = False, open_pr: bool = False, base: str = "main") -> str:
     """Apply the patch and (optionally) create the branch/commit/PR.
 
     Default (commit=False): dry-run — apply in memory and return a report without
-    touching the repo. commit=True writes the branch + commit; open_pr=True also
-    pushes and opens the PR with gh (outward-facing).
+    touching the repo. commit=True creates the fix branch from ``base`` (the branch
+    the pipeline scanned) and commits there, so a PR against ``base`` contains only
+    the fix; open_pr=True also pushes and opens the PR with gh (outward-facing).
+    The repo is always returned to the branch it was on.
     """
-    result = apply_by_content(diff, repo_root)
     branch = branch_name(finding)
-    report = [f"branch: {branch}", result.detail]
-    if not result.ok:
-        return "\n".join(["APPLY FAILED", *report])
-
     if not commit:
+        result = apply_by_content(diff, repo_root)
+        report = [f"branch: {branch} (from {base})", result.detail]
+        if not result.ok:
+            return "\n".join(["APPLY FAILED", *report])
         preview = next(iter(result.changed.values()))
         report.append("\n--- dry-run: resulting file (first 40 lines) ---")
         report += preview.splitlines()[:40]
         return "\n".join(report)
 
-    base = _git(["rev-parse", "--abbrev-ref", "HEAD"], repo_root).stdout.strip()
-    _git(["switch", "-c", branch], repo_root)
-    for path, content in result.changed.items():
-        (repo_root / path).write_text(content, encoding="utf-8")
-        _git(["add", path], repo_root)
-    msg = f"fix(ai): {finding.rule_id} en {finding.file}\n\nParche propuesto por el agente. Revisión humana obligatoria."
-    commit_res = _git(["commit", "--no-verify", "-m", msg], repo_root)
-    report.append(f"committed on {branch}: {commit_res.returncode == 0}")
+    original = _git(["rev-parse", "--abbrev-ref", "HEAD"], repo_root).stdout.strip()
+    created = _git(["switch", "-c", branch, base], repo_root)
+    if created.returncode != 0:
+        return f"could not create {branch} from {base}: {created.stderr.strip()}"
+    try:
+        result = apply_by_content(diff, repo_root)
+        report = [f"branch: {branch} (from {base})", result.detail]
+        if not result.ok:
+            _git(["switch", original], repo_root)
+            _git(["branch", "-D", branch], repo_root)
+            return "\n".join(["APPLY FAILED (branch removed)", *report])
+        for path, content in result.changed.items():
+            (repo_root / path).write_text(content, encoding="utf-8")
+            _git(["add", path], repo_root)
+        msg = (f"fix(ai): {finding.rule_id} en {finding.file}\n\n"
+               "Parche propuesto por el agente. Revisión humana obligatoria.")
+        commit_res = _git(["commit", "-m", msg], repo_root)
+        report.append(f"committed on {branch}: {commit_res.returncode == 0}")
 
-    if open_pr:
-        _git(["push", "-u", "origin", branch], repo_root)
-        pr = subprocess.run(
-            ["gh", "pr", "create", "--base", base, "--head", branch,
-             "--title", f"fix(ai): {finding.rule_id}", "--body", pr_body(finding, diff, verdict)],
-            cwd=repo_root, text=True, capture_output=True)
-        report.append(pr.stdout.strip() or pr.stderr.strip())
-    else:
-        report.append(f"(local only; open with: gh pr create --base {base} --head {branch})")
-    return "\n".join(report)
+        if open_pr:
+            _git(["push", "-u", "origin", branch], repo_root)
+            pr = subprocess.run(
+                ["gh", "pr", "create", "--base", base, "--head", branch,
+                 "--title", f"fix(ai): {finding.rule_id}", "--body", pr_body(finding, diff, verdict)],
+                cwd=repo_root, text=True, capture_output=True)
+            report.append(pr.stdout.strip() or pr.stderr.strip())
+        else:
+            report.append(f"(local only; open with: gh pr create --base {base} --head {branch})")
+        return "\n".join(report)
+    finally:
+        _git(["switch", original], repo_root)
 
 
 def main() -> None:
@@ -177,6 +190,7 @@ def main() -> None:
     parser.add_argument("--fingerprint", required=True)
     parser.add_argument("--patch-file", type=Path, required=True, help="unified diff to apply")
     parser.add_argument("--repo-root", type=Path, default=Path("."))
+    parser.add_argument("--base", default="main", help="branch the fix starts from and the PR targets")
     parser.add_argument("--commit", action="store_true", help="create branch + commit (local)")
     parser.add_argument("--open", action="store_true", help="also push and open the PR (gh)")
     args = parser.parse_args()
@@ -188,7 +202,8 @@ def main() -> None:
         raise SystemExit(f"no finding with fingerprint {args.fingerprint}")
 
     diff = args.patch_file.read_text(encoding="utf-8")
-    print(prepare_pr(target, diff, args.repo_root, commit=args.commit, open_pr=args.open))
+    print(prepare_pr(target, diff, args.repo_root, commit=args.commit, open_pr=args.open,
+                     base=args.base))
 
 
 if __name__ == "__main__":
