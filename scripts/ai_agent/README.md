@@ -39,7 +39,7 @@ reproducible" del plan.
 | 3.4 | Traza de taint como contexto estructurado; decisión FP a partir de la traza | **hecho** — `trace_context.py`, `triage.py` |
 | 3.5 | RAG ligero (imports y funciones relacionadas del fichero vulnerable) | **hecho** — `context_rag.py` |
 | 3.6 | Prompts zero-shot / few-shot / CoT; parche como diff | **hecho** — `strategies.py`, `remediate.py` |
-| 3.7 | Rama `fix/ai-remediation-...` + PR | pendiente |
+| 3.7 | Rama `fix/ai-remediation-...` + PR | **hecho** — `remediation_pr.py`, `triage_engine.py` |
 
 ## Módulos
 
@@ -73,6 +73,18 @@ reproducible" del plan.
   entregable; aplicarlo y el bucle reflexivo son Fase 4.
   ```bash
   GROQ_API_KEY=... python scripts/ai_agent/remediate.py unified/findings.sarif --fingerprint <fp> --repo-root . --strategy cot --run
+  ```
+- **`remediation_pr.py`** — mecánica de 3.7: aplica el parche **por contenido**
+  (los diffs del modelo no llevan números de línea, así que se localiza el bloque
+  `-` literal y se sustituye por el `+`), crea la rama `fix/ai-remediation-…`,
+  commitea y prepara el PR. Dry-run por defecto (aplica en memoria, no toca el
+  repo); `--commit` crea rama+commit local; `--open` además hace push y abre el PR.
+- **`triage_engine.py`** — orquestador (capstone de la Fase 3): encadena
+  parse → filtro (CVSS≥7 ∩ traza) → triaje → (si TP) parche → PR. Sin argumentos
+  lista los candidatos; con `--fingerprint … --run` ejecuta un hallazgo de punta a
+  punta.
+  ```bash
+  python scripts/ai_agent/triage_engine.py unified/findings.sarif --repo-root .   # lista candidatos
   ```
 - **`evaluate.py`** — probe de desarrollo (NO el experimento de Fase 5): corre el
   triaje sobre el conjunto etiquetado en varios modos (`notrace` / `trace` /
