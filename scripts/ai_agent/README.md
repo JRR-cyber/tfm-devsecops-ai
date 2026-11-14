@@ -1,4 +1,4 @@
-# Agente de IA (Fase 3)
+# Agente de IA (Fases 3–4)
 
 Agente híbrido del pipeline: lee el SARIF unificado que produce CI
 (`scripts/pipeline/unify_results.py` → `unified/findings.sarif`), triaje cada
@@ -41,6 +41,39 @@ reproducible" del plan.
 | 3.6 | Prompts zero-shot / few-shot / CoT; parche como diff | **hecho** — `strategies.py`, `remediate.py` |
 | 3.7 | Rama `fix/ai-remediation-...` + PR | **hecho** — `remediation_pr.py`, `triage_engine.py` |
 
+Fase 4 (verificación post-parche y bucle reflexivo):
+
+| Paso | Descripción | Estado |
+|---|---|---|
+| 4.1 | Aislamiento: el parche se aplica y commitea en un `git worktree` aparte | **hecho** — `worktree.py` |
+| 4.2 | Rescan local con CodeQL CLI (misma versión/queries que CI) sobre el worktree | pendiente |
+| 4.3 | Emparejamiento pre/post por `tfmContextHash/v1`: FIXED / NOT_FIXED / NEW / PERSISTING | pendiente |
+| 4.4 | Hallazgos reubicados (fingerprint cambiado por el parche) → RELOCATED, no NEW | pendiente |
+| 4.5 | Registro JSONL por intento (reanudable; tokens y tiempo) | pendiente |
+| 4.6 | Decisión del oráculo funcional (`dataset.md` §7) | pendiente |
+| 4.7–4.10 | Bucle reflexivo (3 intentos), oráculo funcional, etiquetado/escalado de PRs, ensayo de punta a punta | pendiente |
+
+## Aislamiento con worktrees (4.1)
+
+Aplicar el parche cambiando de rama en el checkout del usuario (como hacía la
+primera versión de 3.7) es frágil: reescribe su árbol de trabajo, falla si hay
+cambios locales y una rama basada en `main` puede no contener ni el propio código
+del agente (pasó al abrir el PR demo #7). Un `git worktree` es un segundo
+directorio de trabajo ligado al mismo repositorio, con su propia rama: la rama
+`fix/ai-remediation-…` vive ahí y el checkout del usuario no se toca.
+
+- **Ubicación:** fuera del repo (`<repo>/../tfm-worktrees/`, configurable con
+  `TFM_WORKTREE_ROOT`), para que los escáneres de CI, pre-commit o una base de datos
+  CodeQL del checkout principal no los vean, y para mantener rutas cortas en Windows.
+- **Barrera de seguridad:** el módulo solo crea y borra ramas `fix/ai-remediation-*`;
+  el agente no puede usarlo para escribir en `main`.
+- **Ciclo de vida:** el directorio del worktree se borra siempre al terminar; la rama
+  se conserva solo si el parche se aplicó y se commiteó (es lo que apunta el PR). Si
+  el parche no aplica, se borran rama y worktree. `reset()` devuelve el worktree a
+  `base` para un intento nuevo del bucle reflexivo (4.7).
+- **Diffs multi-fichero:** se rechazan explícitamente (el prompt pide un solo
+  fichero; antes se habrían mezclado bajo una ruta).
+
 ## Módulos
 
 - **`sarif_parser.py`** — convierte el SARIF unificado en objetos `Finding`
@@ -78,7 +111,14 @@ reproducible" del plan.
   (los diffs del modelo no llevan números de línea, así que se localiza el bloque
   `-` literal y se sustituye por el `+`), crea la rama `fix/ai-remediation-…`,
   commitea y prepara el PR. Dry-run por defecto (aplica en memoria, no toca el
-  repo); `--commit` crea rama+commit local; `--open` además hace push y abre el PR.
+  repo); `--commit` crea rama+commit local (en un worktree aislado, 4.1); `--open`
+  además hace push y abre el PR.
+- **`worktree.py`** — worktrees aislados para aplicar y verificar parches (Paso
+  4.1). Ver "Aislamiento con worktrees" arriba.
+  ```bash
+  python scripts/ai_agent/worktree.py list
+  python scripts/ai_agent/worktree.py remove fix/ai-remediation-<regla>-<fp8> [--delete-branch]
+  ```
 - **`triage_engine.py`** — orquestador (capstone de la Fase 3): encadena
   parse → filtro (CVSS≥7 ∩ traza) → triaje → (si TP) parche → PR. Sin argumentos
   lista los candidatos; con `--fingerprint … --run` ejecuta un hallazgo de punta a

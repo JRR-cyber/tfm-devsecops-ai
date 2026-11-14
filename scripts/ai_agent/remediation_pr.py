@@ -74,6 +74,10 @@ def parse_diff(diff: str) -> tuple[str | None, list[tuple[str, str]]]:
 
 def apply_by_content(diff: str, repo_root: Path) -> ApplyResult:
     """Apply each hunk by locating its old block verbatim and replacing it."""
+    # The remediation prompt asks for a single-file diff; a multi-file one would
+    # be parsed under one path and misapplied, so reject it explicitly.
+    if len(re.findall(r"^\+\+\+ ", diff, re.MULTILINE)) > 1:
+        return ApplyResult(False, "multi-file diff: only single-file patches are supported")
     path, hunks = parse_diff(diff)
     if not path:
         return ApplyResult(False, "no file path in diff")
@@ -133,9 +137,10 @@ def prepare_pr(finding: Finding, diff: str, repo_root: Path, verdict: str | None
 
     Default (commit=False): dry-run — apply in memory and return a report without
     touching the repo. commit=True creates the fix branch from ``base`` (the branch
-    the pipeline scanned) and commits there, so a PR against ``base`` contains only
-    the fix; open_pr=True also pushes and opens the PR with gh (outward-facing).
-    The repo is always returned to the branch it was on.
+    the pipeline scanned) in an isolated git worktree (Paso 4.1) and commits there,
+    so a PR against ``base`` contains only the fix and the user's checkout is never
+    touched; open_pr=True also pushes and opens the PR with gh (outward-facing).
+    The worktree directory is always removed; the branch is kept only on success.
     """
     branch = branch_name(finding)
     if not commit:
@@ -148,24 +153,29 @@ def prepare_pr(finding: Finding, diff: str, repo_root: Path, verdict: str | None
         report += preview.splitlines()[:40]
         return "\n".join(report)
 
-    original = _git(["rev-parse", "--abbrev-ref", "HEAD"], repo_root).stdout.strip()
-    created = _git(["switch", "-c", branch, base], repo_root)
-    if created.returncode != 0:
-        return f"could not create {branch} from {base}: {created.stderr.strip()}"
+    from worktree import WorktreeError, commit_all, create, remove
+
     try:
-        result = apply_by_content(diff, repo_root)
-        report = [f"branch: {branch} (from {base})", result.detail]
+        wt = create(repo_root, branch, base)
+    except WorktreeError as exc:
+        return f"could not create {branch} from {base}: {exc}"
+    ok = False
+    try:
+        # Apply against the worktree (= base), not the user's checkout.
+        result = apply_by_content(diff, wt.path)
+        report = [f"branch: {branch} (from {base}, worktree {wt.path})", result.detail]
         if not result.ok:
-            _git(["switch", original], repo_root)
-            _git(["branch", "-D", branch], repo_root)
             return "\n".join(["APPLY FAILED (branch removed)", *report])
         for path, content in result.changed.items():
-            (repo_root / path).write_text(content, encoding="utf-8")
-            _git(["add", path], repo_root)
+            (wt.path / path).write_text(content, encoding="utf-8")
         msg = (f"fix(ai): {finding.rule_id} en {finding.file}\n\n"
                "Parche propuesto por el agente. Revisión humana obligatoria.")
-        commit_res = _git(["commit", "-m", msg], repo_root)
-        report.append(f"committed on {branch}: {commit_res.returncode == 0}")
+        try:
+            sha = commit_all(wt, list(result.changed), msg)
+        except WorktreeError as exc:
+            return "\n".join(["COMMIT FAILED (branch removed)", *report, str(exc)])
+        ok = True
+        report.append(f"committed on {branch}: {sha[:7]}")
 
         if open_pr:
             _git(["push", "-u", "origin", branch], repo_root)
@@ -178,7 +188,7 @@ def prepare_pr(finding: Finding, diff: str, repo_root: Path, verdict: str | None
             report.append(f"(local only; open with: gh pr create --base {base} --head {branch})")
         return "\n".join(report)
     finally:
-        _git(["switch", original], repo_root)
+        remove(repo_root, wt, delete_branch=not ok)
 
 
 def main() -> None:
