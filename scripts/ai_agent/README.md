@@ -47,7 +47,7 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 |---|---|---|
 | 4.1 | Aislamiento: el parche se aplica y commitea en un `git worktree` aparte | **hecho** — `worktree.py` |
 | 4.2 | Rescan local con CodeQL CLI (misma versión/queries que CI) sobre el worktree | **hecho** — `rescan.py`; equivalencia con CI medida en los 31 alcances del dataset |
-| 4.3 | Emparejamiento pre/post por `tfmContextHash/v1`: FIXED / NOT_FIXED / NEW / PERSISTING | pendiente |
+| 4.3 | Emparejamiento pre/post por `tfmContextHash/v1`: FIXED / NOT_FIXED / NEW / PERSISTING | **hecho** — `regression.py` |
 | 4.4 | Hallazgos reubicados (fingerprint cambiado por el parche) → RELOCATED, no NEW | pendiente |
 | 4.5 | Registro JSONL por intento (reanudable; tokens y tiempo) | pendiente |
 | 4.6 | Decisión del oráculo funcional (`dataset.md` §7) | pendiente |
@@ -169,6 +169,58 @@ python scripts/ai_agent/rescan.py --source-root ../tfm-worktrees/<caso> --scope 
 El tiempo de `database create` + `analyze` se devuelve en el resultado (métrica de
 *overhead* de la Fase 5).
 
+## Comparación pre/post por fingerprint (4.3)
+
+`regression.py` compara el rescan del proyecto **antes** (base sin parche) y
+**después** (worktree parcheado), emparejando por `tfmContextHash/v1`, nunca por
+línea: un parche desplaza líneas y un emparejamiento por línea daría por
+"arreglado y nuevo" todo lo que hay debajo de la edición.
+
+| Resultado | Criterio |
+|---|---|
+| objetivo **FIXED** | su digest desaparece **y** no aparece un NEW de la misma regla en el mismo fichero |
+| objetivo **NOT_FIXED** | su digest sigue, o aparece reubicado (ver abajo) |
+| **NEW** | hallazgo en post sin pareja en pre → posible regresión de seguridad |
+| **PERSISTING** | presente en ambos (incluye los 4 extra de alcance de 4.2) |
+| **DISAPPEARED** | otro hallazgo que desaparece (arreglo colateral o texto editado; 4.4 lo refina) |
+
+Decisiones:
+
+- **Multiconjunto de digests.** El fingerprint es `digest:ocurrencia`; el índice de
+  ocurrencia cambia si aparece o desaparece un hallazgo idéntico, así que se compara
+  por `label_key` (el digest) contando repeticiones.
+- **Guarda contra el falso éxito.** El digest hashea el *texto* de la línea marcada.
+  Un parche cosmético en la línea vulnerable (cambiar comillas, renombrar una
+  variable) cambia el digest aunque la vulnerabilidad siga ahí. Sin la segunda
+  condición eso contaría como FIXED; con ella sale **NOT_FIXED (relocated)**.
+- **Baseline cacheada** por commit base y alcance (`_rescan/baseline/<sha>/<alcance>`):
+  se escanea una vez y se reutiliza en todos los intentos y estrategias.
+- `verify_patch` hace todo el ciclo en un worktree desechable (se borran
+  worktree y rama): verificar solo mide; conservar el arreglo y abrir el PR es
+  `remediation_pr.prepare_pr`.
+
+Validación real (SQLi de `routes/login.ts:34`, fingerprint `c292aea5…`, base
+`84ce0be`, CodeQL 2.27.4):
+
+| Parche | Objetivo | NEW | PERSISTING | Rescan |
+|---|---|---:|---:|---|
+| Real (el del PR demo #7: consulta parametrizada) | **FIXED** | 0 | 93 | baseline 92 s + post 87 s |
+| Cosmético (solo cambia `''` por `""` en la línea vulnerable) | **NOT_FIXED (relocated)** | 1 (`js/sql-injection` en la misma línea, digest nuevo) | 93 | post 85 s (baseline cacheada) |
+
+- El parche real no introduce regresiones. La alerta #97
+  (`js/insufficient-password-hash` en `lib/insecurity.ts:41`), que el check de GitHub
+  del PR #7 marcó como "nueva" porque el parche movió un paso de su flujo, sale
+  **PERSISTING**: su fingerprint no cambia. Es el ejemplo de por qué se empareja por
+  fingerprint y no con la heurística de "código cambiado".
+- El parche cosmético demuestra la guarda en un caso real: una comparación ingenua
+  por digest lo habría contado como FIXED + 1 NEW.
+
+```bash
+python scripts/ai_agent/regression.py verify unified/findings.sarif --fingerprint <fp> \
+    --patch-file fix.diff --repo-root .
+python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif --target <fp>
+```
+
 ## Módulos
 
 - **`sarif_parser.py`** — convierte el SARIF unificado en objetos `Finding`
@@ -208,6 +260,9 @@ El tiempo de `database create` + `analyze` se devuelve en el resultado (métrica
   commitea y prepara el PR. Dry-run por defecto (aplica en memoria, no toca el
   repo); `--commit` crea rama+commit local (en un worktree aislado, 4.1); `--open`
   además hace push y abre el PR.
+- **`regression.py`** — comparación pre/post por fingerprint (Paso 4.3):
+  FIXED / NOT_FIXED / NEW / PERSISTING / DISAPPEARED, y `verify_patch` (worktree →
+  baseline → parche → rescan → comparación). Ver "Comparación pre/post" arriba.
 - **`rescan.py`** — rescan local post-parche con CodeQL CLI (Paso 4.2), con la
   misma versión y suite que CI y el SARIF con forma de artefacto unificado. Ver
   "Rescan local con CodeQL" arriba.
