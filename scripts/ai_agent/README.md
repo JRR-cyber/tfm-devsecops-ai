@@ -48,7 +48,7 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 | 4.1 | Aislamiento: el parche se aplica y commitea en un `git worktree` aparte | **hecho** — `worktree.py` |
 | 4.2 | Rescan local con CodeQL CLI (misma versión/queries que CI) sobre el worktree | **hecho** — `rescan.py`; equivalencia con CI medida en los 31 alcances del dataset |
 | 4.3 | Emparejamiento pre/post por `tfmContextHash/v1`: FIXED / NOT_FIXED / NEW / PERSISTING | **hecho** — `regression.py` |
-| 4.4 | Hallazgos reubicados (fingerprint cambiado por el parche) → RELOCATED, no NEW | pendiente |
+| 4.4 | Hallazgos reubicados (fingerprint cambiado por el parche) → RELOCATED, no NEW | **hecho** — `regression.py` |
 | 4.5 | Registro JSONL por intento (reanudable; tokens y tiempo) | pendiente |
 | 4.6 | Decisión del oráculo funcional (`dataset.md` §7) | pendiente |
 | 4.7–4.10 | Bucle reflexivo (3 intentos), oráculo funcional, etiquetado/escalado de PRs, ensayo de punta a punta | pendiente |
@@ -64,7 +64,11 @@ directorio de trabajo ligado al mismo repositorio, con su propia rama: la rama
 
 - **Ubicación:** fuera del repo (`<repo>/../tfm-worktrees/`, configurable con
   `TFM_WORKTREE_ROOT`), para que los escáneres de CI, pre-commit o una base de datos
-  CodeQL del checkout principal no los vean, y para mantener rutas cortas en Windows.
+  CodeQL del checkout principal no los vean. Cada worktree se llama
+  `wt-<hash de la rama>` (longitud fija): Windows limita las rutas a 260 caracteres
+  y el fichero más profundo de Juice Shop ocupa 181, así que un nombre derivado de
+  una rama larga desbordaba el límite (pasó con `js/insecure-randomness`). Si
+  `git worktree add` falla, se borran la rama y el directorio a medio crear.
 - **Barrera de seguridad:** el módulo solo crea y borra ramas `fix/ai-remediation-*`;
   el agente no puede usarlo para escribir en `main`.
 - **Ciclo de vida:** el directorio del worktree se borra siempre al terminar; la rama
@@ -214,6 +218,38 @@ Validación real (SQLi de `routes/login.ts:34`, fingerprint `c292aea5…`, base
   fingerprint y no con la heurística de "código cambiado".
 - El parche cosmético demuestra la guarda en un caso real: una comparación ingenua
   por digest lo habría contado como FIXED + 1 NEW.
+
+### Hallazgos reubicados (4.4)
+
+El problema de la reubicación tiene dos caras. La del **objetivo** (falso FIXED) ya
+la cubre la guarda de 4.3. La otra es el **resto** de hallazgos: si el parche toca
+de paso otra línea marcada, ese hallazgo aparece como DISAPPEARED + NEW, y el NEW
+parece una regresión que no existe (falso NEW). El bucle reflexivo rechazaría o
+escalaría un parche bueno, y la Fase 5 inflaría la tasa de regresión.
+
+Regla: tras emparejar por fingerprint, cada hallazgo desaparecido se empareja con
+un NEW de la **misma regla en el mismo fichero** → **RELOCATED** (sale de NEW y de
+DISAPPEARED). Decisiones:
+
+- La identidad sigue siendo el fingerprint; la línea solo **desempata** cuando hay
+  varios candidatos de la misma regla en el fichero (el más cercano). Nunca decide
+  por sí sola que dos hallazgos son el mismo.
+- El objetivo empareja **primero**. Si el objetivo se arregló y a la vez otro
+  hallazgo de la misma regla del mismo fichero se reubicó, el objetivo puede
+  "quedarse" con ese NEW y salir NOT_FIXED. Es deliberado: el error posible va en
+  la dirección conservadora (falso NOT_FIXED, que el bucle reintenta o escala),
+  nunca hacia un falso FIXED.
+- El objetivo reubicado del parche cosmético ya no cuenta como NEW (no es una
+  regresión, es el objetivo sin arreglar).
+
+Validación real (CodeQL 2.27.4, base `84ce0be`):
+
+| Parche | Objetivo | NEW | RELOCATED |
+|---|---|---:|---:|
+| Cosmético SQLi (reclasificado sin re-escanear) | NOT_FIXED (relocated) | 0 (antes 1) | 1 (el propio objetivo) |
+| `lib/insecurity.ts`, 2 hunks: arregla `js/insecure-randomness` (l. 53, `Math.random` → `crypto.randomBytes`) y retoca cosméticamente `js/user-controlled-bypass` (l. 55) | **FIXED** | **0** | 1 (l. 55, digest `1af3e17b` → `7db83792`) |
+
+Sin 4.4, el segundo caso habría salido "FIXED + 1 NEW": una regresión inexistente.
 
 ```bash
 python scripts/ai_agent/regression.py verify unified/findings.sarif --fingerprint <fp> \

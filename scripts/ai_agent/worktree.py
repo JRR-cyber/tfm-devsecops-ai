@@ -25,8 +25,9 @@ Usage (manual inspection / cleanup):
 
 from __future__ import annotations
 
+import hashlib
 import os
-import re
+import shutil
 import subprocess
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -63,7 +64,13 @@ def default_root(repo_root: Path) -> Path:
 
 
 def _dir_name(branch: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]+", "-", branch.removeprefix(BRANCH_PREFIX))
+    """Short, fixed-length directory name for a branch.
+
+    Windows limits paths to 260 characters and Juice Shop's deepest tracked file
+    is 181 characters long, so the worktree prefix must stay short whatever the
+    branch is called (a name derived from a long branch overflowed the limit).
+    """
+    return "wt-" + hashlib.sha1(branch.encode("utf-8")).hexdigest()[:10]
 
 
 def create(repo_root: Path, branch: str, base: str = "main",
@@ -79,8 +86,16 @@ def create(repo_root: Path, branch: str, base: str = "main",
     if _git(["rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"], repo_root).returncode == 0:
         raise WorktreeError(f"branch {branch} already exists (remove it or pick another name)")
     path.parent.mkdir(parents=True, exist_ok=True)
-    _check(_git(["worktree", "add", "-b", branch, str(path), base], repo_root),
-           f"git worktree add {branch} from {base}")
+    res = _git(["worktree", "add", "-b", branch, str(path), base], repo_root)
+    if res.returncode != 0:
+        # git may have created the branch and part of the directory before
+        # failing: leave nothing behind.
+        shutil.rmtree(path, ignore_errors=True)
+        _git(["worktree", "prune"], repo_root)
+        _git(["branch", "-D", branch], repo_root)
+        errors = [l for l in res.stderr.splitlines() if l.startswith(("error", "fatal"))]
+        raise WorktreeError(f"git worktree add {branch} from {base}: "
+                            + ("; ".join(errors) or res.stderr.strip()[-500:]))
     return Worktree(path=path, branch=branch, base=base)
 
 

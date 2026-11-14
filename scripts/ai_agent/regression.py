@@ -24,8 +24,16 @@ Outcomes:
   regressions introduced by the patch.
 - **PERSISTING** — untouched findings (including the 4 scope extras of 4.2, which
   appear on both sides).
-- **DISAPPEARED** — other findings that went away (collateral fixes, or findings
-  whose flagged text the patch edited; 4.4 refines these against NEW ones).
+- **RELOCATED** (4.4) — a finding whose flagged text the patch edited: its digest
+  disappears and a new digest of the *same rule in the same file* appears. It is
+  the same finding, not a regression, so the pair is taken out of NEW and
+  DISAPPEARED. This includes the relocated target above (NOT_FIXED, not NEW).
+- **DISAPPEARED** — other findings that went away (collateral fixes).
+
+Identity is always the fingerprint. The line number is used only as a
+*tie-breaker* inside the secondary (rule, file) pairing, when several unmatched
+findings of the same rule share a file — never to decide that two findings are
+the same.
 
 ``verify_patch`` runs the whole check: clean worktree from ``base`` (4.1), baseline
 rescan (cached per base commit and scope), apply the patch, post rescan, compare.
@@ -59,31 +67,37 @@ class Comparison:
     new: list[Finding] = field(default_factory=list)
     persisting: list[Finding] = field(default_factory=list)
     disappeared: list[Finding] = field(default_factory=list)
+    moved: list[tuple[Finding, Finding]] = field(default_factory=list)   # RELOCATED (pre, post)
 
     @property
     def regression(self) -> bool:
-        """The patch introduced at least one new finding."""
+        """The patch introduced at least one genuinely new finding."""
         return bool(self.new)
 
     def summary(self) -> str:
         status = self.status + (" (relocated: same rule still reported in the file)"
                                 if self.relocated else "")
         lines = [f"target {self.target[:8]}: {status}",
-                 f"new {len(self.new)}, persisting {len(self.persisting)}, "
-                 f"disappeared {len(self.disappeared)}"]
+                 f"new {len(self.new)}, relocated {len(self.moved)}, "
+                 f"persisting {len(self.persisting)}, disappeared {len(self.disappeared)}"]
+        row = lambda f: f"{f.label_key[:8]}  {f.rule_id}  {f.file}:{f.start_line}  CVSS {f.security_severity}"
         for title, items in (("NEW:", self.new), ("DISAPPEARED:", self.disappeared)):
             if items:
                 lines.append(title)
-                lines += [f"  {f.label_key[:8]}  {f.rule_id}  {f.file}:{f.start_line}"
-                          f"  CVSS {f.security_severity}" for f in items]
+                lines += [f"  {row(f)}" for f in items]
+        if self.moved:
+            lines.append("RELOCATED (pre -> post):")
+            lines += [f"  {row(a)}  ->  {b.label_key[:8]}:{b.start_line}" for a, b in self.moved]
         return "\n".join(lines)
 
     def as_dict(self) -> dict:
-        brief = lambda fs: [{"fingerprint": f.label_key, "rule": f.rule_id, "file": f.file,
-                             "line": f.start_line, "cvss": f.security_severity} for f in fs]
+        one = lambda f: {"fingerprint": f.label_key, "rule": f.rule_id, "file": f.file,
+                         "line": f.start_line, "cvss": f.security_severity}
         return {"target": self.target, "status": self.status, "relocated": self.relocated,
-                "regression": self.regression, "new": brief(self.new),
-                "persisting": len(self.persisting), "disappeared": brief(self.disappeared)}
+                "regression": self.regression, "new": [one(f) for f in self.new],
+                "moved": [{"pre": one(a), "post": one(b)} for a, b in self.moved],
+                "persisting": len(self.persisting),
+                "disappeared": [one(f) for f in self.disappeared]}
 
 
 def _by_digest(findings: list[Finding]) -> dict[str, list[Finding]]:
@@ -97,27 +111,45 @@ def compare(pre: list[Finding], post: list[Finding], target_key: str) -> Compari
     """Classify post-patch findings against pre-patch ones for a target finding."""
     target_key = target_key.split(":")[0]
     pre_by, post_by = _by_digest(pre), _by_digest(post)
+    if target_key not in pre_by:   # accept an unambiguous prefix (reports show 8 chars)
+        hits = [k for k in pre_by if k.startswith(target_key)]
+        if len(hits) == 1:
+            target_key = hits[0]
     if target_key not in pre_by:
         raise ValueError(f"target {target_key} is not in the pre-patch scan "
                          "(was the baseline scanned with the same scope?)")
     target = pre_by[target_key][0]
 
-    new, persisting, disappeared = [], [], []
+    new, persisting, gone = [], [], []
     for key in pre_by.keys() | post_by.keys():
         before, after = pre_by.get(key, []), post_by.get(key, [])
         keep = min(len(before), len(after))
         persisting += after[:keep]
         new += after[keep:]
-        if key != target_key:
-            disappeared += before[keep:]
+        gone += before[keep:]          # includes the target if its digest is gone
+
+    # 4.4: pair each vanished finding with a new one of the same rule in the same
+    # file (closest line as tie-breaker). The target goes first so it claims its
+    # relocated counterpart before any other vanished finding can.
+    gone.sort(key=lambda f: (f.label_key != target_key, f.file, f.start_line))
+    moved: list[tuple[Finding, Finding]] = []
+    disappeared = []
+    for old in gone:
+        candidates = [f for f in new if f.rule_id == old.rule_id and f.file == old.file]
+        if candidates:
+            match = min(candidates, key=lambda f: abs(f.start_line - old.start_line))
+            new.remove(match)
+            moved.append((old, match))
+        elif old.label_key != target_key:
+            disappeared.append(old)
 
     still_there = target_key in post_by
-    relocated = not still_there and any(
-        f.rule_id == target.rule_id and f.file == target.file for f in new)
+    relocated = not still_there and any(old.label_key == target_key for old, _ in moved)
     status = NOT_FIXED if still_there or relocated else FIXED
     order = lambda fs: sorted(fs, key=lambda f: (f.file, f.start_line, f.rule_id))
     return Comparison(target=target_key, status=status, relocated=relocated,
-                      new=order(new), persisting=order(persisting), disappeared=order(disappeared))
+                      new=order(new), persisting=order(persisting), disappeared=order(disappeared),
+                      moved=sorted(moved, key=lambda p: (p[0].file, p[0].start_line)))
 
 
 # --------------------------------------------------------------------------- verify
@@ -195,7 +227,10 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.cmd == "compare":
-        c = compare(parse_sarif(args.pre), parse_sarif(args.post), args.target)
+        try:
+            c = compare(parse_sarif(args.pre), parse_sarif(args.post), args.target)
+        except ValueError as exc:
+            raise SystemExit(f"error: {exc}")
         print(json.dumps(c.as_dict(), indent=1) if args.json else c.summary())
         return
 
