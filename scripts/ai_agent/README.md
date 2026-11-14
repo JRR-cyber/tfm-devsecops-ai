@@ -46,7 +46,7 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 | Paso | Descripción | Estado |
 |---|---|---|
 | 4.1 | Aislamiento: el parche se aplica y commitea en un `git worktree` aparte | **hecho** — `worktree.py` |
-| 4.2 | Rescan local con CodeQL CLI (misma versión/queries que CI) sobre el worktree | pendiente |
+| 4.2 | Rescan local con CodeQL CLI (misma versión/queries que CI) sobre el worktree | **hecho** — `rescan.py`; equivalencia con CI medida en los 31 alcances del dataset |
 | 4.3 | Emparejamiento pre/post por `tfmContextHash/v1`: FIXED / NOT_FIXED / NEW / PERSISTING | pendiente |
 | 4.4 | Hallazgos reubicados (fingerprint cambiado por el parche) → RELOCATED, no NEW | pendiente |
 | 4.5 | Registro JSONL por intento (reanudable; tokens y tiempo) | pendiente |
@@ -73,6 +73,101 @@ directorio de trabajo ligado al mismo repositorio, con su propia rama: la rama
   `base` para un intento nuevo del bucle reflexivo (4.7).
 - **Diffs multi-fichero:** se rechazan explícitamente (el prompt pide un solo
   fichero; antes se habrían mezclado bajo una ruta).
+
+## Rescan local con CodeQL (4.2)
+
+Tras aplicar el parche hay que comprobar si la vulnerabilidad desaparece y si
+aparecen otras. Hacerlo en CI cuesta ~2 min por intento y deja ramas en GitHub;
+con un bucle de hasta 3 intentos × 33 casos no es viable, así que el rescan corre
+**en local reproduciendo el análisis de CI**:
+
+| Aspecto | CI (`devsecops-pipeline.yml`) | Rescan local (`rescan.py`) |
+|---|---|---|
+| Versión CodeQL | 2.27.4 (la que registra el SARIF; el *default* de la action v4.38.1 es 2.27.0, pero el runner tenía en caché una más nueva) | 2.27.4 fijada; se niega a correr con otra salvo `--allow-version-mismatch` (solo desarrollo) |
+| Suite | `security-extended` | `javascript-security-extended.qls` (la misma) |
+| Lenguaje / build | `javascript-typescript`, `build-mode: none` | igual |
+| Alcance | todo el repo | solo el **proyecto** del hallazgo (Juice Shop o un caso SecBench.js) |
+| Fingerprint | `unify_results.add_fingerprints` | la misma función, **importada** (no copiada ni modificada) |
+| Ficheros escaneados | checkout limpio (solo ficheros versionados) | worktree limpio; **se niega** si el alcance tiene ficheros no versionados o ignorados |
+
+**Por qué exigir un árbol limpio** (hallazgo de la primera ejecución): el checkout
+de desarrollo de Juice Shop contiene `node_modules/`, `build/`, `frontend/dist/` y
+`.angular/` (miles de ficheros JS generados y minificados que CI nunca ve). CodeQL
+los extraía, el escaneo pasaba de 10 minutos sin terminar y habría reportado
+hallazgos inexistentes en CI. Un worktree (4.1) solo contiene ficheros versionados,
+así que el rescan se hace siempre sobre él (`--allow-untracked` existe solo para
+desarrollo).
+
+**Por qué escanear solo el proyecto:** reconstruir la base de datos de todo el repo
+en cada intento es lento, y los flujos de datos no cruzan proyectos. Las URIs del
+SARIF se reescriben a rutas relativas al repo, así que los fingerprints son
+comparables con los de CI. Equivalencia **comprobada, no supuesta**:
+
+- *Post-procesado* (reescritura de URIs + fingerprint), offline sobre el SARIF
+  crudo de CI del run 43605673798: 345/345 fingerprints idénticos al artefacto
+  unificado (91/91 en Juice Shop, 12/12 en un caso SecBench), URIs de los
+  `codeFlows` también relativas al repo.
+- *Escaneo real* en un worktree limpio de `84ce0be` frente al CI del mismo commit
+  (run 43605673798), Windows 11, 12 hilos:
+
+  | Alcance | Local | CI | Emparejados | Tiempo |
+  |---|---:|---:|---:|---:|
+  | Repo completo | 345 | 345 | **345** (exacto) | 250 s |
+  | Juice Shop (solo el proyecto) | 94 | 91 | **91** + 3 solo-local | 98 s |
+  | SecBench `clamscan_1.2.0` (solo el caso) | 12 | 12 | **12** (exacto) | 50 s |
+
+  El repo completo coincide al 100 % con CI, así que la plataforma (Windows frente
+  a Linux) no introduce diferencias. Los 3 extra de Juice Shop
+  (`js/clear-text-logging` en `lib/antiCheat.ts:76,105,217`, flujos entre ficheros
+  desde propiedades llamadas `changePasswordBenderChallenge` / `leakedApiKeyChallenge`)
+  se deben al **alcance**: con solo el proyecto, CodeQL resuelve algunos flujos entre
+  ficheros de forma distinta.
+
+**Decisión: escanear solo el proyecto.** La comparación que decide el veredicto es
+pre frente a post, ambos locales y con la misma configuración: un hallazgo extra
+aparece en los dos lados (PERSISTING) y no cambia ningún veredicto. El hallazgo
+objetivo se localiza igual (los 91 de CI están en el escaneo local). A cambio, la
+rejilla de la Fase 5 (33 casos × 3 estrategias × ≤ 3 intentos = hasta 297 rescans)
+baja de ~20 h (repo completo, 250 s) a ~3,7 h (~40 s por caso SecBench, ~98 s Juice
+Shop).
+
+**Equivalencia medida en todo el dataset** (`benchmarks/dataset.csv`: 30 casos
+SecBench.js + Juice Shop = 31 alcances), escaneo por proyecto frente a CI:
+
+| | Alcances | Hallazgos CI | Recuperados en local | Solo-local |
+|---|---:|---:|---:|---:|
+| SecBench.js | 30 | 162 | **162** (100 %) | 1 (`json-ptr_1.1.0`: `js/unsafe-code-construction` en `src/index.js:229`) |
+| Juice Shop | 1 | 91 | **91** (100 %) | 3 (`js/clear-text-logging`, ver arriba) |
+| **Total** | **31** | **253** | **253 (100 %)** | **4 (1,6 %)** |
+
+29 de los 30 casos SecBench son idénticos a CI; tiempo medio ~40 s por caso. Ningún
+hallazgo de CI se pierde con el escaneo por proyecto: la diferencia es solo en el
+sentido de *más* hallazgos (4), que aparecen tanto antes como después del parche y
+se declaran en Amenazas a la validez.
+
+Instalación del bundle (CLI + packs de queries precompilados, lo mismo que usa la
+action), en Git Bash:
+
+```bash
+mkdir -p ~/tools && cd ~/tools
+curl -LO https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.4/codeql-bundle-win64.tar.gz
+curl -LO https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.4/codeql-bundle-win64.tar.gz.checksum.txt
+sha256sum -c codeql-bundle-win64.tar.gz.checksum.txt      # debe decir: OK
+tar -xzf codeql-bundle-win64.tar.gz                        # crea ~/tools/codeql/
+~/tools/codeql/codeql version --format=terse              # 2.27.4
+export CODEQL_CLI=~/tools/codeql/codeql.exe                # o añadir ~/tools/codeql al PATH
+```
+
+Uso:
+
+```bash
+# --source-root debe ser un worktree limpio (p. ej. ../tfm-worktrees/<caso>)
+python scripts/ai_agent/rescan.py --source-root ../tfm-worktrees/<caso> --scope src/app/juice-shop \
+    --out ../tfm-worktrees/_rescan/juice-shop --compare unified/findings.sarif
+```
+
+El tiempo de `database create` + `analyze` se devuelve en el resultado (métrica de
+*overhead* de la Fase 5).
 
 ## Módulos
 
@@ -113,6 +208,9 @@ directorio de trabajo ligado al mismo repositorio, con su propia rama: la rama
   commitea y prepara el PR. Dry-run por defecto (aplica en memoria, no toca el
   repo); `--commit` crea rama+commit local (en un worktree aislado, 4.1); `--open`
   además hace push y abre el PR.
+- **`rescan.py`** — rescan local post-parche con CodeQL CLI (Paso 4.2), con la
+  misma versión y suite que CI y el SARIF con forma de artefacto unificado. Ver
+  "Rescan local con CodeQL" arriba.
 - **`worktree.py`** — worktrees aislados para aplicar y verificar parches (Paso
   4.1). Ver "Aislamiento con worktrees" arriba.
   ```bash
