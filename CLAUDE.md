@@ -9,7 +9,7 @@ Master's thesis (TFM, UC3M) project: a Shift-Left DevSecOps pipeline with a **hy
 Fixed design decisions (roadmap v2 — don't substitute tools without being asked):
 
 - Scanners: Semgrep OSS (SAST), Trivy (SCA + container), TruffleHog (secrets), CodeQL (dataflow/taint `codeFlows`). All output SARIF/JSON, consolidated into one unified artifact that feeds the agent.
-- LLM: Groq API, Llama 3.3 70B as the single model (secret `GROQ_API_KEY`). Experiments compare **prompting strategies** (zero-shot / few-shot / CoT), not models.
+- LLM: Groq API, single fixed model `openai/gpt-oss-120b` (secret `GROQ_API_KEY`). The roadmap's original model, Llama 3.3 70B, was retired by Groq on 2026-08-16 (whole Llama chat family gone); Groq was kept and the model switched to its most capable open-weights general model — rationale in `scripts/ai_agent/README.md` "Decisión de modelo". Experiments compare **prompting strategies** (zero-shot / few-shot / CoT), not models.
 - Pre/post-patch findings are matched by SARIF `partialFingerprints`, **never by line number**.
 - Auto-remediation only for CVSS >= 7.0 (Semgrep severity needs a documented mapping); lower severities are only reported.
 - Reflexive repair loop: max 3 attempts per vulnerability; record iteration count.
