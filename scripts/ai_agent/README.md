@@ -49,7 +49,7 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 | 4.2 | Rescan local con CodeQL CLI (misma versión/queries que CI) sobre el worktree | **hecho** — `rescan.py`; equivalencia con CI medida en los 31 alcances del dataset |
 | 4.3 | Emparejamiento pre/post por `tfmContextHash/v1`: FIXED / NOT_FIXED / NEW / PERSISTING | **hecho** — `regression.py` |
 | 4.4 | Hallazgos reubicados (fingerprint cambiado por el parche) → RELOCATED, no NEW | **hecho** — `regression.py` |
-| 4.5 | Registro JSONL por intento (reanudable; tokens y tiempo) | pendiente |
+| 4.5 | Registro JSONL por intento (reanudable; tokens y tiempo) | **hecho** — `results.py` |
 | 4.6 | Decisión del oráculo funcional (`dataset.md` §7) | pendiente |
 | 4.7–4.10 | Bucle reflexivo (3 intentos), oráculo funcional, etiquetado/escalado de PRs, ensayo de punta a punta | pendiente |
 
@@ -251,6 +251,47 @@ Validación real (CodeQL 2.27.4, base `84ce0be`):
 
 Sin 4.4, el segundo caso habría salido "FIXED + 1 NEW": una regresión inexistente.
 
+## Registro de resultados reanudable (4.5)
+
+El bucle reflexivo (4.7) y la rejilla de la Fase 5 hacen cientos de llamadas al LLM
+y rescans sobre una API con límites de uso. Un run puede cortarse en cualquier
+momento (back-off de 429 agotado, caída, Ctrl+C), así que `results.py` escribe
+**una línea JSON por intento en cuanto termina**, y al relanzar se saltan los
+intentos ya registrados en vez de volver a pagarlos.
+
+| Grupo | Campos |
+|---|---|
+| Clave (reanudar; nunca duplicada) | `kind` (triage/remediation), `fingerprint`, `strategy`, `with_trace`, `with_rag`, `attempt` |
+| Resultado | triaje: `verdict`, `confidence`, `rationale`; remediación: `status` (FIXED / NOT_FIXED / APPLY_FAILED / NO_DIFF), `relocated`, `regression`, `new`, `moved`, `persisting`, `disappeared`, `diff` |
+| Coste (*overhead*) | `prompt_tokens`, `completion_tokens`, `llm_seconds`, `rescan_seconds` |
+| Procedencia | `model_served` (lo que la API dice que sirvió: detecta cambios silenciosos de modelo), `model_requested`, `codeql_version`, `agent_commit`, `base_sha`, `timestamp`, `raw` (respuesta cruda del modelo) |
+
+Decisiones:
+
+- **Se guarda la respuesta cruda.** La API no es lo bastante determinista para
+  regenerarla, y el modelo puede retirarse (ya pasó con Llama 3.3 70B): el log es
+  la única evidencia reproducible del experimento.
+- **Escritura robusta:** cada línea se escribe con un solo `write` + `flush` +
+  `fsync`. Una línea cortada por una caída (sin salto de línea final) se detecta al
+  abrir, se elimina y se cuenta (`repaired`).
+- `triage.decide` y `remediate.remediate` devuelven ahora el uso de la llamada
+  (`usage`: tokens, segundos, modelo servido) junto al veredicto/parche;
+  `groq_client.timed_complete` lo mide.
+- El resumen estima el coste con el precio de lista de `gpt-oss-120b` en Groq
+  ($0,15 / $0,60 por millón de tokens de entrada/salida, consultado 14-11-2026).
+
+Validación offline: uso de tokens capturado; registro realista construido con los
+rescans reales de la SQLi (FIXED, 0 NEW, 93 PERSISTING); duplicados rechazados;
+línea parcial reparada; y **reanudación**: un run de 6 intentos que "cae" en la
+llamada 4 deja 3 registrados, y al relanzarlo hace exactamente las 3 llamadas que
+faltan.
+
+```bash
+python scripts/ai_agent/results.py summary results/run.jsonl
+```
+
+## Uso de `regression.py`
+
 ```bash
 python scripts/ai_agent/regression.py verify unified/findings.sarif --fingerprint <fp> \
     --patch-file fix.diff --repo-root .
@@ -299,6 +340,8 @@ python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif 
 - **`regression.py`** — comparación pre/post por fingerprint (Paso 4.3):
   FIXED / NOT_FIXED / NEW / PERSISTING / DISAPPEARED, y `verify_patch` (worktree →
   baseline → parche → rescan → comparación). Ver "Comparación pre/post" arriba.
+- **`results.py`** — registro JSONL reanudable de cada intento (Paso 4.5): clave,
+  resultado, tokens, tiempos y procedencia. Ver "Registro de resultados" arriba.
 - **`rescan.py`** — rescan local post-parche con CodeQL CLI (Paso 4.2), con la
   misma versión y suite que CI y el SARIF con forma de artefacto unificado. Ver
   "Rescan local con CodeQL" arriba.
