@@ -50,8 +50,8 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 | 4.3 | Emparejamiento pre/post por `tfmContextHash/v1`: FIXED / NOT_FIXED / NEW / PERSISTING | **hecho** — `regression.py` |
 | 4.4 | Hallazgos reubicados (fingerprint cambiado por el parche) → RELOCATED, no NEW | **hecho** — `regression.py` |
 | 4.5 | Registro JSONL por intento (reanudable; tokens y tiempo) | **hecho** — `results.py` |
-| 4.6 | Decisión del oráculo funcional (`dataset.md` §7) | pendiente |
-| 4.7–4.10 | Bucle reflexivo (3 intentos), oráculo funcional, etiquetado/escalado de PRs, ensayo de punta a punta | pendiente |
+| 4.6 | Decisión del oráculo funcional (`dataset.md` §7) | **hecho** — [D9](../../docs/benchmark/decisions.md): seguridad doble (CodeQL + exploit sobre el parche) y funcional por niveles (tests de API en Juice Shop, suite del paquete T1, diferencial T2) |
+| 4.7–4.10 | Bucle reflexivo (3 intentos), implementación del oráculo de D9, etiquetado/escalado de PRs, ensayo de punta a punta | pendiente |
 
 ## Aislamiento con worktrees (4.1)
 

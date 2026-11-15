@@ -19,7 +19,7 @@ Roadmap phases (v2) — keep each step in its phase:
 
 - Phases 1–2 (done): Juice Shop + SecBench.js dataset (33 cases, `docs/benchmark/dataset.md`), CI pipeline + unified SARIF.
 - Phase 3 (weeks 2–4), agent in `scripts/ai_agent/`: 3.1 Groq key; 3.2 parser of the unified SARIF (line, rule, snippet, `codeFlows`); 3.3 CVSS >= 7.0 filter + documented Semgrep severity mapping; 3.4 taint trace injected as structured prompt context (FP decision based on the trace); 3.5 lightweight RAG (imports and related functions of the vulnerable file); 3.6 zero-shot / few-shot / CoT prompts, patch as a diff; 3.7 branch + PR. Ends with a **decision checkpoint** (full scope vs. cut-down Phases 4–5).
-- Phase 4 (weeks 5–6): post-patch rescan + `npm test`, regression by fingerprints, reflexive loop (3 attempts), PR labelling/escalation. Open issue: SecBench.js packages ship no tests, so a functional-regression oracle must be chosen first (`dataset.md` §7).
+- Phase 4 (weeks 5–6): post-patch rescan + `npm test`, regression by fingerprints, reflexive loop (3 attempts), PR labelling/escalation. Functional-regression oracle decided in `docs/benchmark/decisions.md` D9 (Juice Shop API tests; per-package suite T1; differential vs. the original vulnerable version T2; oracle inputs pre-registered before any Phase 5 patch), implemented in 4.8.
 - Phase 5 (weeks 7–8): within-subject experiments (FPR, RSR, overhead, regression, convergence), "blind" memorization control without the trace, Friedman/Wilcoxon.
 - Phase 6 (weeks 9–14): thesis and defense.
 

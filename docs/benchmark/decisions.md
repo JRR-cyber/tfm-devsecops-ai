@@ -2,6 +2,34 @@
 
 Decisiones de diseño del conjunto experimental, con su motivo y su fecha. Alimenta el capítulo de gestión de proyecto de la memoria (Fase 6). La más reciente arriba.
 
+## D9 — Oráculos de verificación del parche: seguridad doble y funcional por niveles (2026-11-15)
+
+**Contexto.** D1–D8 crearon oráculos para el **triaje**: el exploit (o la ablación de una guarda) demuestra si una vulnerabilidad es real. En la Fase 4 el agente **modifica el código** y hay dos preguntas nuevas: ¿el parche elimina la vulnerabilidad? y ¿el parche rompe el paquete? Para la segunda no había oráculo (limitación abierta en [`dataset.md`](dataset.md) §7). Sin él, un parche que neutraliza la función entera (p. ej. un `return obj;` al inicio de `set-value`) cuenta como éxito: CodeQL deja de ver el flujo y el exploit falla, pero el paquete ya no funciona. La RSR de la Fase 5 saldría inflada y la métrica de regresión no se podría medir.
+
+**Decisión.**
+
+1. **Oráculo de seguridad, con dos fuentes.**
+   - *Estático*: rescan local de CodeQL y comparación por fingerprint (pasos 4.2–4.4).
+   - *Dinámico*: se ejecuta el **exploit contra el código parcheado**. En SecBench.js, el exploit del harness con una variante de `run_case.sh` que instala el código local del worktree en lugar de la versión publicada en npm. En Juice Shop, los tests de ataque de su propia suite y los exploits de la evidencia de triaje.
+   - Si CodeQL da FIXED pero el exploit sigue funcionando, el resultado es **arreglo incompleto** y se reporta como tal.
+2. **Oráculo funcional, por niveles.** Cada caso queda etiquetado con el nivel que se le aplica, y los resultados se reportan por nivel.
+
+   | Nivel | Casos | Oráculo |
+   |---|---|---|
+   | Juice Shop | 3 | Los ficheros de tests de API de la ruta tocada (`login`, `search`, `product-review`: 41 tests). Cada test se clasifica **antes de generar los parches** como *de vulnerabilidad* (comprueba que el reto se puede resolver, así que se espera que falle tras un arreglo correcto) o *funcional* (tiene que seguir pasando). |
+   | T1: suite original | hasta 25 de 30 | La suite de tests del propio paquete: los ficheros del tarball de npm o, si no vienen, los del repositorio original en la etiqueta de esa versión. Se ejecuta en el harness Docker (Node 16). Primero se ejecuta sobre el código **sin parchear**, y los tests que ya fallan ahí se excluyen. **Regresión = un test que pasaba sobre la base y falla tras el parche.** |
+   | T2: diferencial | el resto (≥ 5) | Para los casos sin tests o con una suite que no corre en el harness (toolchain antigua, red), se llama al mismo punto de entrada que usa el exploit con **entradas benignas** y se exige la misma salida que en la versión vulnerable original, normalizada por clase: `argv` de `child_process` interceptado (command-injection), objeto resultante comparado en profundidad (prototype-pollution), valor devuelto (redos, code-injection), respuesta HTTP a un fichero legítimo (path-traversal). Las entradas benignas se fijan **antes de generar los parches**. |
+
+3. **Requisito de preregistro.** La clasificación de los tests de Juice Shop, la lista de tests válidos de T1 y las entradas benignas de T2 se fijan y se versionan antes de que exista ningún parche de la Fase 5, para que el oráculo no se ajuste a los parches.
+
+**Motivo.** Encuesta de los 30 casos SecBench.js del dataset: **25** declaran un script de test real en su `package.json`, **12** incluyen los ficheros de test en el tarball de npm y **5** no tienen tests (`pixl-class`, `giting`, `portprocesses`, `serve-here.js`, `tinyserver2`). Usar la suite del propio paquete cuando existe es el oráculo más fuerte y menos discutible; el diferencial cubre el resto sin dejar casos fuera. Opciones descartadas:
+
+- *Diferencial contra la versión corregida oficial* (la otra opción de `dataset.md` §7): el salto de versión suele traer cambios ajenos al arreglo (refactorizaciones, nuevas opciones), que darían falsas regresiones.
+- *Solo comprobar que el módulo carga* (smoke test): demasiado débil; no detecta el ejemplo de `set-value`.
+- *Tests generados por un LLM*: circular, el mismo tipo de modelo juzgaría su propio trabajo.
+
+**Consecuencia.** El paso 4.6 solo registra esta decisión. La implementación es el **paso 4.8**: variante local del harness, ejecución de T1 y T2, clasificación de los tests de Juice Shop y conexión del resultado con el bucle reflexivo (4.7), donde un parche que rompe tests cuenta como intento fallido. En "Amenazas a la validez" se declara que T2 es más débil que una suite real, que las suites originales solo cubren lo que cubren y que Juice Shop aporta solo 3 casos.
+
 ## D8 — El conjunto de triaje se limita a hallazgos CodeQL con traza de taint (2026-10-25)
 
 **Decisión.** El conjunto de triaje incluye solo hallazgos de **CodeQL con un `codeFlows` de dos o más pasos** (criterio T1 de [`triage-labels.md`](triage-labels.md)). Quedan fuera: los hallazgos de Semgrep, Trivy (SCA/contenedor) y TruffleHog, y los hallazgos de CodeQL de consultas **sin dataflow** (una sola ubicación, sin `codeFlows`).
