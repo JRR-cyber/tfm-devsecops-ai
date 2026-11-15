@@ -41,6 +41,8 @@ reproducible" del plan.
 | 3.6 | Prompts zero-shot / few-shot / CoT; parche como diff | **hecho** — `strategies.py`, `remediate.py` |
 | 3.7 | Rama `fix/ai-remediation-...` + PR | **hecho** — `remediation_pr.py`, `triage_engine.py` |
 
+Checkpoint de la Fase 3: alcance completo, recortando profundidad dentro de cada fase ([D10](../../docs/benchmark/decisions.md)).
+
 Fase 4 (verificación post-parche y bucle reflexivo):
 
 | Paso | Descripción | Estado |

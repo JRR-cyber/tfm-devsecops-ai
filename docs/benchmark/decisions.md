@@ -2,6 +2,21 @@
 
 Decisiones de diseño del conjunto experimental, con su motivo y su fecha. Alimenta el capítulo de gestión de proyecto de la memoria (Fase 6). La más reciente arriba.
 
+## D10 — Checkpoint de la Fase 3: alcance completo, recortando profundidad dentro de cada fase (2026-11-13)
+
+**Contexto.** El roadmap cierra la Fase 3 con un punto de decisión: seguir con el alcance completo o recortar las Fases 4–5. Al cerrarla (3.1–3.7 completos; PR demo #7, en el que CodeQL deja de detectar la SQLi de `login.ts:34`) había estas señales: gpt-oss-120b flojo descartando falsos positivos, la traza aporta sobre todo *alcanzabilidad*, el RAG es lo que mueve los FP, y los parches son de buena calidad pero sus diffs no se aplican con `git apply` (cabeceras `@@` vacías).
+
+**Decisión.** **No se recorta ninguna fase**; se recorta profundidad dentro de cada una.
+
+- *Fase 4, se mantiene lo esencial*: rescan con emparejamiento por fingerprint, bucle reflexivo de 3 intentos, etiquetado y escalado de PRs.
+- *Fase 4, se simplifica*: en cada intento se reescanea solo con CodeQL el proyecto del hallazgo, no el pipeline entero (aplicado en 4.2: alcance por proyecto, con la equivalencia con CI medida). El oráculo funcional se planteó inicialmente como "exploit + prueba de humo" en SecBench; **D9 lo sustituye por uno más fuerte** (suite del paquete y diferencial).
+- *Fase 5, el riesgo es la API, no el diseño*: la rejilla es grande (triaje ≈ 53 hallazgos × 3 estrategias × {sin traza, traza, traza+RAG}; remediación hasta ~300 llamadas), el límite gratuito de Groq ya frenó las pruebas y Groq ya retiró un modelo (Llama 3.3 70B). Mitigaciones: guardar cada resultado en disco con reanudación (hecho en 4.5), fijar la rejilla antes de ejecutar, lanzar los experimentos pronto y valorar el plan de pago de Groq con un tope de gasto (coste estimado de la rejilla completa: ~1–2 USD).
+- *Orden de recorte si el calendario aprieta*: primero la remediación de SecBench.js, nunca el triaje (es el que responde a la pregunta de investigación sobre la traza).
+
+**Motivo.** Cada fase sostiene una parte de la tesis: sin la Fase 4 no se puede afirmar que los parches funcionan (no hay rescan, ni oráculo funcional, ni RSR); sin la Fase 5 no se responde a la pregunta de investigación (si la traza ayuda y qué estrategia es mejor). Recortar una fase entera deja la tesis sin una de sus afirmaciones; recortar profundidad solo reduce su alcance, y eso se puede declarar.
+
+**Consecuencia.** La Fase 4 se ejecuta completa (4.1–4.10). Las simplificaciones se declaran en "Amenazas a la validez" junto con las limitaciones de D9.
+
 ## D9 — Oráculos de verificación del parche: seguridad doble y funcional por niveles (2026-11-15)
 
 **Contexto.** D1–D8 crearon oráculos para el **triaje**: el exploit (o la ablación de una guarda) demuestra si una vulnerabilidad es real. En la Fase 4 el agente **modifica el código** y hay dos preguntas nuevas: ¿el parche elimina la vulnerabilidad? y ¿el parche rompe el paquete? Para la segunda no había oráculo (limitación abierta en [`dataset.md`](dataset.md) §7). Sin él, un parche que neutraliza la función entera (p. ej. un `return obj;` al inicio de `set-value`) cuenta como éxito: CodeQL deja de ver el flujo y el exploit falla, pero el paquete ya no funciona. La RSR de la Fase 5 saldría inflada y la métrica de regresión no se podría medir.
