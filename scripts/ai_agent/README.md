@@ -29,6 +29,22 @@ resultados aplican a este modelo), que se declara en Amenazas a la validez. Se
 mantiene un modelo open-weights, coherente con la premisa de "modelo asequible y
 reproducible" del plan.
 
+**Comprobación con la página oficial de modelos de Groq (16-11-2026).** Llama 3.3
+70B y Llama 3.1 8B siguen listados, pero con precio y límites "Contact Sales": solo
+están disponibles con contrato Enterprise, no en el plan gratuito ni en el plan de
+pago *Developer*. Pagar no los recupera, así que la elección se mantiene.
+`gpt-oss-120b` en el plan Developer: $0,15 / $0,60 por millón de tokens de
+entrada/salida, 250K tokens/min y 1K peticiones/min.
+
+**Plan de pago.** Para el ensayo del 4.10 y la Fase 5 se usará el plan Developer
+con un **tope de gasto de $10/mes** (límite de la consola de Groq, que bloquea la
+API al alcanzarlo). Estimación pesimista de la rejilla completa: ~$2,50, o ~$6 si
+los tokens de razonamiento triplicaran la salida. El ensayo del 4.10 medirá el
+coste real por llamada antes de la Fase 5. A 16-11-2026 la contratación está
+**pendiente**: Groq tiene las altas al plan Developer "temporalmente no
+disponibles por alta demanda". Los pasos 4.7–4.9 no la necesitan (se prueban con un
+LLM simulado y pocas llamadas reales); hay que resolverla antes del 4.10.
+
 ## Estado por paso
 
 | Paso | Descripción | Estado |
@@ -53,7 +69,10 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 | 4.4 | Hallazgos reubicados (fingerprint cambiado por el parche) → RELOCATED, no NEW | **hecho** — `regression.py` |
 | 4.5 | Registro JSONL por intento (reanudable; tokens y tiempo) | **hecho** — `results.py` |
 | 4.6 | Decisión del oráculo funcional (`dataset.md` §7) | **hecho** — [D9](../../docs/benchmark/decisions.md): seguridad doble (CodeQL + exploit sobre el parche) y funcional por niveles (tests de API en Juice Shop, suite del paquete T1, diferencial T2) |
-| 4.7–4.10 | Bucle reflexivo (3 intentos), implementación del oráculo de D9, etiquetado/escalado de PRs, ensayo de punta a punta | pendiente |
+| 4.7 | Bucle reflexivo: hasta 3 intentos, con el motivo del rechazo como feedback | **hecho** — `repair_loop.py` |
+| 4.8 | Implementación de los oráculos de D9 (preregistro + ejecutores) | pendiente |
+| 4.9 | Etiquetado y escalado de PRs | pendiente |
+| 4.10 | Ensayo de punta a punta sobre los 33 casos | pendiente |
 
 ## Aislamiento con worktrees (4.1)
 
@@ -292,6 +311,94 @@ faltan.
 python scripts/ai_agent/results.py summary results/run.jsonl
 ```
 
+## Bucle reflexivo (4.7)
+
+`repair_loop.py` da al agente hasta **3 intentos** por vulnerabilidad (fijado por
+el roadmap) para producir un parche aceptable:
+
+```
+intento k:  remediate (con los intentos 1..k-1 rechazados como feedback)
+            → verify_patch (worktree de la base, rescan CodeQL, 4.1–4.4, + oráculos de D9 en 4.8)
+            → ¿aceptado?  sí → fin (ACCEPTED);  no → feedback → intento k+1
+tras 3 rechazos → ESCALATED (se escala a un humano; etiqueta del PR en 4.9)
+```
+
+**Criterio de aceptación.** Un intento se acepta solo si se cumplen las cuatro:
+
+1. El diff se aplica.
+2. El objetivo queda **FIXED** (4.3: su fingerprint desaparece y no está reubicado).
+3. El parche **no introduce ningún NEW** (una regresión de seguridad).
+4. Todos los oráculos adicionales pasan. `verify_patch` ya acepta una lista de
+   `checks` que se ejecutan sobre el worktree parcheado; los implementa el 4.8.
+
+**Feedback.** El motivo del rechazo se escribe para que el modelo pueda actuar:
+
+| Resultado del intento | Feedback al modelo |
+|---|---|
+| NO_DIFF | No devolvió ningún diff; debe devolver un único bloque ```diff |
+| APPLY_FAILED | No se pudo aplicar (motivo); las líneas de contexto y `-` deben copiarse literalmente del fichero original |
+| NOT_FIXED | CodeQL sigue reportando la regla en `fichero:línea`; el dato contaminado sigue llegando al *sink* |
+| NOT_FIXED (reubicado) | La edición cambió la línea marcada, pero el flujo sigue llegando al *sink* (nueva línea) |
+| FIXED con NEW | El objetivo desaparece, pero aparecen hallazgos nuevos (regla, `fichero:línea` y mensaje de CodeQL) |
+| Oráculo fallido (4.8) | `Check '<nombre>' failed: <motivo>` |
+
+Decisiones:
+
+- **Cada intento se aplica al fichero original**, sobre el mismo commit base,
+  nunca encima de un intento anterior. Así cada verificación es independiente y
+  comparable, y el prompt se lo dice al modelo.
+- **El intento 1 usa exactamente el prompt de la Fase 3.** A partir del 2 se
+  añaden *todos* los intentos rechazados (diff + motivo), no solo el último, para
+  que el modelo no vuelva a un arreglo que ya falló. La estrategia, la traza y el
+  RAG de la condición no cambian entre intentos.
+- **Registro (4.5):** cada intento se guarda con su número, `accepted`,
+  `feedback`, `max_attempts` y los `checks` (esquema 2). Al relanzar, el historial
+  se reconstruye desde el log y se sigue en el intento siguiente. El resumen
+  (`results.py summary`) da la **convergencia**: bucles ACCEPTED / ESCALATED /
+  INCOMPLETE (interrumpidos) y en qué intento se aceptaron (métrica de la Fase 5).
+- **Un fallo de infraestructura** (CodeQL que falla, red) lanza una excepción y
+  **no se registra**: no dice nada del modelo, así que al reanudar se repite el
+  intento.
+- **Dónde van los logs.** Los de desarrollo y ensayo (incluido el 4.10), en
+  `results/dev/`, que git ignora (`.gitignore` ya excluye `results/`). Los de la
+  Fase 5 se commitearán como datos de la tesis, porque son la evidencia de los
+  resultados; su ruta versionada se fija al preparar la Fase 5.
+
+Validación:
+
+- **Offline** (LLM y verificador simulados, log real), 22 comprobaciones:
+  aceptación en el intento 1 con un prompt idéntico al de la Fase 3; NO_DIFF →
+  APPLY_FAILED → NOT_FIXED termina en ESCALATED con el historial creciendo en cada
+  prompt; un NEW rechaza un FIXED; feedback de reubicado y de oráculo fallido;
+  caída en la llamada del intento 2 y reanudación (solo se hacen las llamadas que
+  faltan y el historial sale del log); un error de infraestructura no se registra;
+  un bucle terminado no repite llamadas; resumen de convergencia.
+- **Real** (CodeQL 2.27.4 y worktrees reales, LLM con guion para no gastar API),
+  sobre la SQLi de `login.ts:34`:
+
+  | Intento | Parche | Resultado | Rescan |
+  |---|---|---|---|
+  | 1 | Cosmético (`''` → `""` en la línea vulnerable) | NOT_FIXED reubicado → rechazado; el feedback indica la línea y que el flujo sigue llegando al *sink* | base 111 s + post 94 s |
+  | 2 | El arreglo real del PR #7 (consulta parametrizada) | FIXED, 0 NEW, 93 PERSISTING → **ACCEPTED** | post 88 s (base en caché) |
+
+  5,2 minutos en total; no quedó ningún worktree ni rama temporal.
+- **En vivo** (gpt-oss-120b, plan gratuito, zero-shot con traza y RAG, misma SQLi;
+  16-11-2026): **ACCEPTED en el intento 1**. Consulta parametrizada con
+  `replacements` de Sequelize, FIXED, 0 NEW, 93 PERSISTING. Coste: 1.923 tokens de
+  entrada y 365 de salida (~$0,0005 a precio de lista), 1,1 s de LLM y 89 s de
+  rescan. Es un solo caso (n = 1), pero queda muy por debajo del supuesto
+  pesimista del presupuesto (8K + 2K tokens por llamada de remediación).
+  Observación: el modelo sustituyó el comentario marcador de Juice Shop
+  (`// vuln-code-snippet vuln-line …`) por `// fixed: …`. En una rama de artefacto
+  no importa, pero es un cambio fuera del arreglo estricto. Si se repite, el 4.8
+  debe decidir si los oráculos lo toleran.
+
+```bash
+python scripts/ai_agent/repair_loop.py unified/findings.sarif --fingerprint <fp> --repo-root . \
+    [--strategy cot] [--no-trace] [--no-rag] [--log results/dev/repair.jsonl]
+python scripts/ai_agent/results.py summary results/dev/repair.jsonl
+```
+
 ## Uso de `regression.py`
 
 ```bash
@@ -329,7 +436,8 @@ python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif 
 - **`remediate.py`** — genera el parche como **diff unificado** (Paso 3.6) para un
   TP de CVSS ≥ 7. Mismo contexto estructurado que el triaje (+ RAG por defecto,
   no se parchea lo que no se ve) y las mismas estrategias. Generar el diff es el
-  entregable; aplicarlo y el bucle reflexivo son Fase 4.
+  entregable; aplicarlo y el bucle reflexivo son Fase 4 (`history` lleva los
+  intentos rechazados, 4.7).
   ```bash
   GROQ_API_KEY=... python scripts/ai_agent/remediate.py unified/findings.sarif --fingerprint <fp> --repo-root . --strategy cot --run
   ```
@@ -344,6 +452,9 @@ python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif 
   baseline → parche → rescan → comparación). Ver "Comparación pre/post" arriba.
 - **`results.py`** — registro JSONL reanudable de cada intento (Paso 4.5): clave,
   resultado, tokens, tiempos y procedencia. Ver "Registro de resultados" arriba.
+- **`repair_loop.py`** — bucle reflexivo (Paso 4.7): parche → verificación →
+  feedback → nuevo parche, hasta 3 intentos; ACCEPTED o ESCALATED. Ver "Bucle
+  reflexivo" arriba.
 - **`rescan.py`** — rescan local post-parche con CodeQL CLI (Paso 4.2), con la
   misma versión y suite que CI y el SARIF con forma de artefacto unificado. Ver
   "Rescan local con CodeQL" arriba.

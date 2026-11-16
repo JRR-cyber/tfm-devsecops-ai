@@ -12,7 +12,9 @@ Each line carries:
   ``fingerprint`` (label_key), ``strategy``, ``with_trace``, ``with_rag``,
   ``attempt`` — used for resuming and never duplicated;
 - the **outcome** — triage verdict, or patch status (FIXED / NOT_FIXED /
-  APPLY_FAILED / NO_DIFF) with NEW / RELOCATED / PERSISTING counts from 4.3/4.4;
+  APPLY_FAILED / NO_DIFF) with NEW / RELOCATED / PERSISTING counts from 4.3/4.4,
+  the extra oracle checks, and (4.7) whether the reflexive loop ``accepted`` the
+  attempt plus the ``feedback`` it gave the model for the next one;
 - the **cost** — prompt/completion tokens, LLM seconds, rescan seconds (overhead);
 - the **provenance** — model reported by the API, CodeQL version, agent commit,
   base commit, timestamp, and the model's raw reply (audit; the API is not
@@ -37,7 +39,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2   # 2 (4.7): accepted / feedback / max_attempts / checks
 TRIAGE, REMEDIATION = "triage", "remediation"
 NO_DIFF, APPLY_FAILED = "NO_DIFF", "APPLY_FAILED"
 
@@ -169,7 +171,8 @@ def remediation_outcome(finding, patch, verification=None, base_sha: str | None 
             "new": cmp["new"], "moved": cmp["moved"], "persisting": cmp["persisting"],
             "disappeared": cmp["disappeared"], "apply_detail": verification.detail,
             "baseline_cached": verification.baseline_cached,
-            "rescan_seconds": verification.seconds}
+            "rescan_seconds": verification.seconds,
+            "checks": [asdict(r) for r in verification.checks]}
 
 
 # ------------------------------------------------------------------------ summary
@@ -192,10 +195,48 @@ def summary(records: list[dict]) -> str:
         lines.append(f"  {kind:<11} {strategy:<9} " +
                      ", ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda kv: str(kv[0]))))
     cost = tokens_in / 1e6 * PRICE_INPUT_PER_M + tokens_out / 1e6 * PRICE_OUTPUT_PER_M
+    lines += convergence_lines(records)
     lines += [f"tokens: {tokens_in} in + {tokens_out} out  (~${cost:.2f} at list price)",
               f"time: LLM {llm_s:.0f}s, rescans {rescan_s:.0f}s",
               "model served: " + ", ".join(f"{m} ({n})" for m, n in served.items())]
     return "\n".join(lines)
+
+
+def loops(records: list[dict]) -> dict[tuple, list[dict]]:
+    """Remediation attempts grouped by loop (finding x condition), in attempt order."""
+    out: dict[tuple, list[dict]] = defaultdict(list)
+    for r in records:
+        if r["kind"] == REMEDIATION and "accepted" in r:
+            out[(r["fingerprint"], r["strategy"], r["with_trace"], r["with_rag"])].append(r)
+    return {k: sorted(v, key=lambda r: r["attempt"]) for k, v in out.items()}
+
+
+def loop_outcome(attempts: list[dict]) -> tuple[str, int]:
+    """(ACCEPTED | ESCALATED | INCOMPLETE, iterations) of one reflexive loop (4.7)."""
+    for r in attempts:
+        if r["accepted"]:
+            return "ACCEPTED", r["attempt"]
+    last = attempts[-1]
+    if last["attempt"] >= last.get("max_attempts", 3):
+        return "ESCALATED", last["attempt"]
+    return "INCOMPLETE", last["attempt"]   # interrupted run: relaunch to resume
+
+
+def convergence_lines(records: list[dict]) -> list[str]:
+    by_loop = loops(records)
+    if not by_loop:
+        return []
+    outcomes = Counter()
+    at = Counter()
+    for attempts in by_loop.values():
+        outcome, n = loop_outcome(attempts)
+        outcomes[outcome] += 1
+        if outcome == "ACCEPTED":
+            at[n] += 1
+    lines = [f"loops: {len(by_loop)} — " + ", ".join(f"{k} {v}" for k, v in sorted(outcomes.items()))]
+    if at:
+        lines.append("  accepted at attempt " + ", ".join(f"#{k}: {v}" for k, v in sorted(at.items())))
+    return lines
 
 
 def main() -> None:
