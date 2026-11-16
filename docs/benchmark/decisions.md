@@ -2,6 +2,49 @@
 
 Decisiones de diseño del conjunto experimental, con su motivo y su fecha. Alimenta el capítulo de gestión de proyecto de la memoria (Fase 6). La más reciente arriba.
 
+## D10 — Checkpoint de la Fase 3: alcance completo, recortando profundidad dentro de cada fase (2026-11-13)
+
+**Contexto.** El roadmap cierra la Fase 3 con un punto de decisión: seguir con el alcance completo o recortar las Fases 4–5. Al cerrarla (3.1–3.7 completos; PR demo #7, en el que CodeQL deja de detectar la SQLi de `login.ts:34`) había estas señales: gpt-oss-120b flojo descartando falsos positivos, la traza aporta sobre todo *alcanzabilidad*, el RAG es lo que mueve los FP, y los parches son de buena calidad pero sus diffs no se aplican con `git apply` (cabeceras `@@` vacías).
+
+**Decisión.** **No se recorta ninguna fase**; se recorta profundidad dentro de cada una.
+
+- *Fase 4, se mantiene lo esencial*: rescan con emparejamiento por fingerprint, bucle reflexivo de 3 intentos, etiquetado y escalado de PRs.
+- *Fase 4, se simplifica*: en cada intento se reescanea solo con CodeQL el proyecto del hallazgo, no el pipeline entero (aplicado en 4.2: alcance por proyecto, con la equivalencia con CI medida). El oráculo funcional se planteó inicialmente como "exploit + prueba de humo" en SecBench; **D9 lo sustituye por uno más fuerte** (suite del paquete y diferencial).
+- *Fase 5, el riesgo es la API, no el diseño*: la rejilla es grande (triaje ≈ 53 hallazgos × 3 estrategias × {sin traza, traza, traza+RAG}; remediación hasta ~300 llamadas), el límite gratuito de Groq ya frenó las pruebas y Groq ya retiró un modelo (Llama 3.3 70B). Mitigaciones: guardar cada resultado en disco con reanudación (hecho en 4.5), fijar la rejilla antes de ejecutar, lanzar los experimentos pronto y valorar el plan de pago de Groq con un tope de gasto (coste estimado de la rejilla completa: ~1–2 USD).
+- *Orden de recorte si el calendario aprieta*: primero la remediación de SecBench.js, nunca el triaje (es el que responde a la pregunta de investigación sobre la traza).
+
+**Motivo.** Cada fase sostiene una parte de la tesis: sin la Fase 4 no se puede afirmar que los parches funcionan (no hay rescan, ni oráculo funcional, ni RSR); sin la Fase 5 no se responde a la pregunta de investigación (si la traza ayuda y qué estrategia es mejor). Recortar una fase entera deja la tesis sin una de sus afirmaciones; recortar profundidad solo reduce su alcance, y eso se puede declarar.
+
+**Consecuencia.** La Fase 4 se ejecuta completa (4.1–4.10). Las simplificaciones se declaran en "Amenazas a la validez" junto con las limitaciones de D9.
+
+## D9 — Oráculos de verificación del parche: seguridad doble y funcional por niveles (2026-11-15)
+
+**Contexto.** D1–D8 crearon oráculos para el **triaje**: el exploit (o la ablación de una guarda) demuestra si una vulnerabilidad es real. En la Fase 4 el agente **modifica el código** y hay dos preguntas nuevas: ¿el parche elimina la vulnerabilidad? y ¿el parche rompe el paquete? Para la segunda no había oráculo (limitación abierta en [`dataset.md`](dataset.md) §7). Sin él, un parche que neutraliza la función entera (p. ej. un `return obj;` al inicio de `set-value`) cuenta como éxito: CodeQL deja de ver el flujo y el exploit falla, pero el paquete ya no funciona. La RSR de la Fase 5 saldría inflada y la métrica de regresión no se podría medir.
+
+**Decisión.**
+
+1. **Oráculo de seguridad, con dos fuentes.**
+   - *Estático*: rescan local de CodeQL y comparación por fingerprint (pasos 4.2–4.4).
+   - *Dinámico*: se ejecuta el **exploit contra el código parcheado**. En SecBench.js, el exploit del harness con una variante de `run_case.sh` que instala el código local del worktree en lugar de la versión publicada en npm. En Juice Shop, los tests de ataque de su propia suite y los exploits de la evidencia de triaje.
+   - Si CodeQL da FIXED pero el exploit sigue funcionando, el resultado es **arreglo incompleto** y se reporta como tal.
+2. **Oráculo funcional, por niveles.** Cada caso queda etiquetado con el nivel que se le aplica, y los resultados se reportan por nivel.
+
+   | Nivel | Casos | Oráculo |
+   |---|---|---|
+   | Juice Shop | 3 | Los ficheros de tests de API de la ruta tocada (`login`, `search`, `product-review`: 41 tests). Cada test se clasifica **antes de generar los parches** como *de vulnerabilidad* (comprueba que el reto se puede resolver, así que se espera que falle tras un arreglo correcto) o *funcional* (tiene que seguir pasando). |
+   | T1: suite original | hasta 25 de 30 | La suite de tests del propio paquete: los ficheros del tarball de npm o, si no vienen, los del repositorio original en la etiqueta de esa versión. Se ejecuta en el harness Docker (Node 16). Primero se ejecuta sobre el código **sin parchear**, y los tests que ya fallan ahí se excluyen. **Regresión = un test que pasaba sobre la base y falla tras el parche.** |
+   | T2: diferencial | el resto (≥ 5) | Para los casos sin tests o con una suite que no corre en el harness (toolchain antigua, red), se llama al mismo punto de entrada que usa el exploit con **entradas benignas** y se exige la misma salida que en la versión vulnerable original, normalizada por clase: `argv` de `child_process` interceptado (command-injection), objeto resultante comparado en profundidad (prototype-pollution), valor devuelto (redos, code-injection), respuesta HTTP a un fichero legítimo (path-traversal). Las entradas benignas se fijan **antes de generar los parches**. |
+
+3. **Requisito de preregistro.** La clasificación de los tests de Juice Shop, la lista de tests válidos de T1 y las entradas benignas de T2 se fijan y se versionan antes de que exista ningún parche de la Fase 5, para que el oráculo no se ajuste a los parches.
+
+**Motivo.** Encuesta de los 30 casos SecBench.js del dataset: **25** declaran un script de test real en su `package.json`, **12** incluyen los ficheros de test en el tarball de npm y **5** no tienen tests (`pixl-class`, `giting`, `portprocesses`, `serve-here.js`, `tinyserver2`). Usar la suite del propio paquete cuando existe es el oráculo más fuerte y menos discutible; el diferencial cubre el resto sin dejar casos fuera. Opciones descartadas:
+
+- *Diferencial contra la versión corregida oficial* (la otra opción de `dataset.md` §7): el salto de versión suele traer cambios ajenos al arreglo (refactorizaciones, nuevas opciones), que darían falsas regresiones.
+- *Solo comprobar que el módulo carga* (smoke test): demasiado débil; no detecta el ejemplo de `set-value`.
+- *Tests generados por un LLM*: circular, el mismo tipo de modelo juzgaría su propio trabajo.
+
+**Consecuencia.** El paso 4.6 solo registra esta decisión. La implementación es el **paso 4.8**: variante local del harness, ejecución de T1 y T2, clasificación de los tests de Juice Shop y conexión del resultado con el bucle reflexivo (4.7), donde un parche que rompe tests cuenta como intento fallido. En "Amenazas a la validez" se declara que T2 es más débil que una suite real, que las suites originales solo cubren lo que cubren y que Juice Shop aporta solo 3 casos.
+
 ## D8 — El conjunto de triaje se limita a hallazgos CodeQL con traza de taint (2026-10-25)
 
 **Decisión.** El conjunto de triaje incluye solo hallazgos de **CodeQL con un `codeFlows` de dos o más pasos** (criterio T1 de [`triage-labels.md`](triage-labels.md)). Quedan fuera: los hallazgos de Semgrep, Trivy (SCA/contenedor) y TruffleHog, y los hallazgos de CodeQL de consultas **sin dataflow** (una sola ubicación, sin `codeFlows`).

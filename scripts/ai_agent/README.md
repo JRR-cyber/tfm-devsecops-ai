@@ -1,4 +1,4 @@
-# Agente de IA (Fase 3)
+# Agente de IA (Fases 3–4)
 
 Agente híbrido del pipeline: lee el SARIF unificado que produce CI
 (`scripts/pipeline/unify_results.py` → `unified/findings.sarif`), triaje cada
@@ -41,6 +41,265 @@ reproducible" del plan.
 | 3.6 | Prompts zero-shot / few-shot / CoT; parche como diff | **hecho** — `strategies.py`, `remediate.py` |
 | 3.7 | Rama `fix/ai-remediation-...` + PR | **hecho** — `remediation_pr.py`, `triage_engine.py` |
 
+Checkpoint de la Fase 3: alcance completo, recortando profundidad dentro de cada fase ([D10](../../docs/benchmark/decisions.md)).
+
+Fase 4 (verificación post-parche y bucle reflexivo):
+
+| Paso | Descripción | Estado |
+|---|---|---|
+| 4.1 | Aislamiento: el parche se aplica y commitea en un `git worktree` aparte | **hecho** — `worktree.py` |
+| 4.2 | Rescan local con CodeQL CLI (misma versión/queries que CI) sobre el worktree | **hecho** — `rescan.py`; equivalencia con CI medida en los 31 alcances del dataset |
+| 4.3 | Emparejamiento pre/post por `tfmContextHash/v1`: FIXED / NOT_FIXED / NEW / PERSISTING | **hecho** — `regression.py` |
+| 4.4 | Hallazgos reubicados (fingerprint cambiado por el parche) → RELOCATED, no NEW | **hecho** — `regression.py` |
+| 4.5 | Registro JSONL por intento (reanudable; tokens y tiempo) | **hecho** — `results.py` |
+| 4.6 | Decisión del oráculo funcional (`dataset.md` §7) | **hecho** — [D9](../../docs/benchmark/decisions.md): seguridad doble (CodeQL + exploit sobre el parche) y funcional por niveles (tests de API en Juice Shop, suite del paquete T1, diferencial T2) |
+| 4.7–4.10 | Bucle reflexivo (3 intentos), implementación del oráculo de D9, etiquetado/escalado de PRs, ensayo de punta a punta | pendiente |
+
+## Aislamiento con worktrees (4.1)
+
+Aplicar el parche cambiando de rama en el checkout del usuario (como hacía la
+primera versión de 3.7) es frágil: reescribe su árbol de trabajo, falla si hay
+cambios locales y una rama basada en `main` puede no contener ni el propio código
+del agente (pasó al abrir el PR demo #7). Un `git worktree` es un segundo
+directorio de trabajo ligado al mismo repositorio, con su propia rama: la rama
+`fix/ai-remediation-…` vive ahí y el checkout del usuario no se toca.
+
+- **Ubicación:** fuera del repo (`<repo>/../tfm-worktrees/`, configurable con
+  `TFM_WORKTREE_ROOT`), para que los escáneres de CI, pre-commit o una base de datos
+  CodeQL del checkout principal no los vean. Cada worktree se llama
+  `wt-<hash de la rama>` (longitud fija): Windows limita las rutas a 260 caracteres
+  y el fichero más profundo de Juice Shop ocupa 181, así que un nombre derivado de
+  una rama larga desbordaba el límite (pasó con `js/insecure-randomness`). Si
+  `git worktree add` falla, se borran la rama y el directorio a medio crear.
+- **Barrera de seguridad:** el módulo solo crea y borra ramas `fix/ai-remediation-*`;
+  el agente no puede usarlo para escribir en `main`.
+- **Ciclo de vida:** el directorio del worktree se borra siempre al terminar; la rama
+  se conserva solo si el parche se aplicó y se commiteó (es lo que apunta el PR). Si
+  el parche no aplica, se borran rama y worktree. `reset()` devuelve el worktree a
+  `base` para un intento nuevo del bucle reflexivo (4.7).
+- **Diffs multi-fichero:** se rechazan explícitamente (el prompt pide un solo
+  fichero; antes se habrían mezclado bajo una ruta).
+
+## Rescan local con CodeQL (4.2)
+
+Tras aplicar el parche hay que comprobar si la vulnerabilidad desaparece y si
+aparecen otras. Hacerlo en CI cuesta ~2 min por intento y deja ramas en GitHub;
+con un bucle de hasta 3 intentos × 33 casos no es viable, así que el rescan corre
+**en local reproduciendo el análisis de CI**:
+
+| Aspecto | CI (`devsecops-pipeline.yml`) | Rescan local (`rescan.py`) |
+|---|---|---|
+| Versión CodeQL | 2.27.4 (la que registra el SARIF; el *default* de la action v4.38.1 es 2.27.0, pero el runner tenía en caché una más nueva) | 2.27.4 fijada; se niega a correr con otra salvo `--allow-version-mismatch` (solo desarrollo) |
+| Suite | `security-extended` | `javascript-security-extended.qls` (la misma) |
+| Lenguaje / build | `javascript-typescript`, `build-mode: none` | igual |
+| Alcance | todo el repo | solo el **proyecto** del hallazgo (Juice Shop o un caso SecBench.js) |
+| Fingerprint | `unify_results.add_fingerprints` | la misma función, **importada** (no copiada ni modificada) |
+| Ficheros escaneados | checkout limpio (solo ficheros versionados) | worktree limpio; **se niega** si el alcance tiene ficheros no versionados o ignorados |
+
+**Por qué exigir un árbol limpio** (hallazgo de la primera ejecución): el checkout
+de desarrollo de Juice Shop contiene `node_modules/`, `build/`, `frontend/dist/` y
+`.angular/` (miles de ficheros JS generados y minificados que CI nunca ve). CodeQL
+los extraía, el escaneo pasaba de 10 minutos sin terminar y habría reportado
+hallazgos inexistentes en CI. Un worktree (4.1) solo contiene ficheros versionados,
+así que el rescan se hace siempre sobre él (`--allow-untracked` existe solo para
+desarrollo).
+
+**Por qué escanear solo el proyecto:** reconstruir la base de datos de todo el repo
+en cada intento es lento, y los flujos de datos no cruzan proyectos. Las URIs del
+SARIF se reescriben a rutas relativas al repo, así que los fingerprints son
+comparables con los de CI. Equivalencia **comprobada, no supuesta**:
+
+- *Post-procesado* (reescritura de URIs + fingerprint), offline sobre el SARIF
+  crudo de CI del run 43605673798: 345/345 fingerprints idénticos al artefacto
+  unificado (91/91 en Juice Shop, 12/12 en un caso SecBench), URIs de los
+  `codeFlows` también relativas al repo.
+- *Escaneo real* en un worktree limpio de `84ce0be` frente al CI del mismo commit
+  (run 43605673798), Windows 11, 12 hilos:
+
+  | Alcance | Local | CI | Emparejados | Tiempo |
+  |---|---:|---:|---:|---:|
+  | Repo completo | 345 | 345 | **345** (exacto) | 250 s |
+  | Juice Shop (solo el proyecto) | 94 | 91 | **91** + 3 solo-local | 98 s |
+  | SecBench `clamscan_1.2.0` (solo el caso) | 12 | 12 | **12** (exacto) | 50 s |
+
+  El repo completo coincide al 100 % con CI, así que la plataforma (Windows frente
+  a Linux) no introduce diferencias. Los 3 extra de Juice Shop
+  (`js/clear-text-logging` en `lib/antiCheat.ts:76,105,217`, flujos entre ficheros
+  desde propiedades llamadas `changePasswordBenderChallenge` / `leakedApiKeyChallenge`)
+  se deben al **alcance**: con solo el proyecto, CodeQL resuelve algunos flujos entre
+  ficheros de forma distinta.
+
+**Decisión: escanear solo el proyecto.** La comparación que decide el veredicto es
+pre frente a post, ambos locales y con la misma configuración: un hallazgo extra
+aparece en los dos lados (PERSISTING) y no cambia ningún veredicto. El hallazgo
+objetivo se localiza igual (los 91 de CI están en el escaneo local). A cambio, la
+rejilla de la Fase 5 (33 casos × 3 estrategias × ≤ 3 intentos = hasta 297 rescans)
+baja de ~20 h (repo completo, 250 s) a ~3,7 h (~40 s por caso SecBench, ~98 s Juice
+Shop).
+
+**Equivalencia medida en todo el dataset** (`benchmarks/dataset.csv`: 30 casos
+SecBench.js + Juice Shop = 31 alcances), escaneo por proyecto frente a CI:
+
+| | Alcances | Hallazgos CI | Recuperados en local | Solo-local |
+|---|---:|---:|---:|---:|
+| SecBench.js | 30 | 162 | **162** (100 %) | 1 (`json-ptr_1.1.0`: `js/unsafe-code-construction` en `src/index.js:229`) |
+| Juice Shop | 1 | 91 | **91** (100 %) | 3 (`js/clear-text-logging`, ver arriba) |
+| **Total** | **31** | **253** | **253 (100 %)** | **4 (1,6 %)** |
+
+29 de los 30 casos SecBench son idénticos a CI; tiempo medio ~40 s por caso. Ningún
+hallazgo de CI se pierde con el escaneo por proyecto: la diferencia es solo en el
+sentido de *más* hallazgos (4), que aparecen tanto antes como después del parche y
+se declaran en Amenazas a la validez.
+
+Instalación del bundle (CLI + packs de queries precompilados, lo mismo que usa la
+action), en Git Bash:
+
+```bash
+mkdir -p ~/tools && cd ~/tools
+curl -LO https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.4/codeql-bundle-win64.tar.gz
+curl -LO https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.4/codeql-bundle-win64.tar.gz.checksum.txt
+sha256sum -c codeql-bundle-win64.tar.gz.checksum.txt      # debe decir: OK
+tar -xzf codeql-bundle-win64.tar.gz                        # crea ~/tools/codeql/
+~/tools/codeql/codeql version --format=terse              # 2.27.4
+export CODEQL_CLI=~/tools/codeql/codeql.exe                # o añadir ~/tools/codeql al PATH
+```
+
+Uso:
+
+```bash
+# --source-root debe ser un worktree limpio (p. ej. ../tfm-worktrees/<caso>)
+python scripts/ai_agent/rescan.py --source-root ../tfm-worktrees/<caso> --scope src/app/juice-shop \
+    --out ../tfm-worktrees/_rescan/juice-shop --compare unified/findings.sarif
+```
+
+El tiempo de `database create` + `analyze` se devuelve en el resultado (métrica de
+*overhead* de la Fase 5).
+
+## Comparación pre/post por fingerprint (4.3)
+
+`regression.py` compara el rescan del proyecto **antes** (base sin parche) y
+**después** (worktree parcheado), emparejando por `tfmContextHash/v1`, nunca por
+línea: un parche desplaza líneas y un emparejamiento por línea daría por
+"arreglado y nuevo" todo lo que hay debajo de la edición.
+
+| Resultado | Criterio |
+|---|---|
+| objetivo **FIXED** | su digest desaparece **y** no aparece un NEW de la misma regla en el mismo fichero |
+| objetivo **NOT_FIXED** | su digest sigue, o aparece reubicado (ver abajo) |
+| **NEW** | hallazgo en post sin pareja en pre → posible regresión de seguridad |
+| **PERSISTING** | presente en ambos (incluye los 4 extra de alcance de 4.2) |
+| **DISAPPEARED** | otro hallazgo que desaparece (arreglo colateral o texto editado; 4.4 lo refina) |
+
+Decisiones:
+
+- **Multiconjunto de digests.** El fingerprint es `digest:ocurrencia`; el índice de
+  ocurrencia cambia si aparece o desaparece un hallazgo idéntico, así que se compara
+  por `label_key` (el digest) contando repeticiones.
+- **Guarda contra el falso éxito.** El digest hashea el *texto* de la línea marcada.
+  Un parche cosmético en la línea vulnerable (cambiar comillas, renombrar una
+  variable) cambia el digest aunque la vulnerabilidad siga ahí. Sin la segunda
+  condición eso contaría como FIXED; con ella sale **NOT_FIXED (relocated)**.
+- **Baseline cacheada** por commit base y alcance (`_rescan/baseline/<sha>/<alcance>`):
+  se escanea una vez y se reutiliza en todos los intentos y estrategias.
+- `verify_patch` hace todo el ciclo en un worktree desechable (se borran
+  worktree y rama): verificar solo mide; conservar el arreglo y abrir el PR es
+  `remediation_pr.prepare_pr`.
+
+Validación real (SQLi de `routes/login.ts:34`, fingerprint `c292aea5…`, base
+`84ce0be`, CodeQL 2.27.4):
+
+| Parche | Objetivo | NEW | PERSISTING | Rescan |
+|---|---|---:|---:|---|
+| Real (el del PR demo #7: consulta parametrizada) | **FIXED** | 0 | 93 | baseline 92 s + post 87 s |
+| Cosmético (solo cambia `''` por `""` en la línea vulnerable) | **NOT_FIXED (relocated)** | 1 (`js/sql-injection` en la misma línea, digest nuevo) | 93 | post 85 s (baseline cacheada) |
+
+- El parche real no introduce regresiones. La alerta #97
+  (`js/insufficient-password-hash` en `lib/insecurity.ts:41`), que el check de GitHub
+  del PR #7 marcó como "nueva" porque el parche movió un paso de su flujo, sale
+  **PERSISTING**: su fingerprint no cambia. Es el ejemplo de por qué se empareja por
+  fingerprint y no con la heurística de "código cambiado".
+- El parche cosmético demuestra la guarda en un caso real: una comparación ingenua
+  por digest lo habría contado como FIXED + 1 NEW.
+
+### Hallazgos reubicados (4.4)
+
+El problema de la reubicación tiene dos caras. La del **objetivo** (falso FIXED) ya
+la cubre la guarda de 4.3. La otra es el **resto** de hallazgos: si el parche toca
+de paso otra línea marcada, ese hallazgo aparece como DISAPPEARED + NEW, y el NEW
+parece una regresión que no existe (falso NEW). El bucle reflexivo rechazaría o
+escalaría un parche bueno, y la Fase 5 inflaría la tasa de regresión.
+
+Regla: tras emparejar por fingerprint, cada hallazgo desaparecido se empareja con
+un NEW de la **misma regla en el mismo fichero** → **RELOCATED** (sale de NEW y de
+DISAPPEARED). Decisiones:
+
+- La identidad sigue siendo el fingerprint; la línea solo **desempata** cuando hay
+  varios candidatos de la misma regla en el fichero (el más cercano). Nunca decide
+  por sí sola que dos hallazgos son el mismo.
+- El objetivo empareja **primero**. Si el objetivo se arregló y a la vez otro
+  hallazgo de la misma regla del mismo fichero se reubicó, el objetivo puede
+  "quedarse" con ese NEW y salir NOT_FIXED. Es deliberado: el error posible va en
+  la dirección conservadora (falso NOT_FIXED, que el bucle reintenta o escala),
+  nunca hacia un falso FIXED.
+- El objetivo reubicado del parche cosmético ya no cuenta como NEW (no es una
+  regresión, es el objetivo sin arreglar).
+
+Validación real (CodeQL 2.27.4, base `84ce0be`):
+
+| Parche | Objetivo | NEW | RELOCATED |
+|---|---|---:|---:|
+| Cosmético SQLi (reclasificado sin re-escanear) | NOT_FIXED (relocated) | 0 (antes 1) | 1 (el propio objetivo) |
+| `lib/insecurity.ts`, 2 hunks: arregla `js/insecure-randomness` (l. 53, `Math.random` → `crypto.randomBytes`) y retoca cosméticamente `js/user-controlled-bypass` (l. 55) | **FIXED** | **0** | 1 (l. 55, digest `1af3e17b` → `7db83792`) |
+
+Sin 4.4, el segundo caso habría salido "FIXED + 1 NEW": una regresión inexistente.
+
+## Registro de resultados reanudable (4.5)
+
+El bucle reflexivo (4.7) y la rejilla de la Fase 5 hacen cientos de llamadas al LLM
+y rescans sobre una API con límites de uso. Un run puede cortarse en cualquier
+momento (back-off de 429 agotado, caída, Ctrl+C), así que `results.py` escribe
+**una línea JSON por intento en cuanto termina**, y al relanzar se saltan los
+intentos ya registrados en vez de volver a pagarlos.
+
+| Grupo | Campos |
+|---|---|
+| Clave (reanudar; nunca duplicada) | `kind` (triage/remediation), `fingerprint`, `strategy`, `with_trace`, `with_rag`, `attempt` |
+| Resultado | triaje: `verdict`, `confidence`, `rationale`; remediación: `status` (FIXED / NOT_FIXED / APPLY_FAILED / NO_DIFF), `relocated`, `regression`, `new`, `moved`, `persisting`, `disappeared`, `diff` |
+| Coste (*overhead*) | `prompt_tokens`, `completion_tokens`, `llm_seconds`, `rescan_seconds` |
+| Procedencia | `model_served` (lo que la API dice que sirvió: detecta cambios silenciosos de modelo), `model_requested`, `codeql_version`, `agent_commit`, `base_sha`, `timestamp`, `raw` (respuesta cruda del modelo) |
+
+Decisiones:
+
+- **Se guarda la respuesta cruda.** La API no es lo bastante determinista para
+  regenerarla, y el modelo puede retirarse (ya pasó con Llama 3.3 70B): el log es
+  la única evidencia reproducible del experimento.
+- **Escritura robusta:** cada línea se escribe con un solo `write` + `flush` +
+  `fsync`. Una línea cortada por una caída (sin salto de línea final) se detecta al
+  abrir, se elimina y se cuenta (`repaired`).
+- `triage.decide` y `remediate.remediate` devuelven ahora el uso de la llamada
+  (`usage`: tokens, segundos, modelo servido) junto al veredicto/parche;
+  `groq_client.timed_complete` lo mide.
+- El resumen estima el coste con el precio de lista de `gpt-oss-120b` en Groq
+  ($0,15 / $0,60 por millón de tokens de entrada/salida, consultado 14-11-2026).
+
+Validación offline: uso de tokens capturado; registro realista construido con los
+rescans reales de la SQLi (FIXED, 0 NEW, 93 PERSISTING); duplicados rechazados;
+línea parcial reparada; y **reanudación**: un run de 6 intentos que "cae" en la
+llamada 4 deja 3 registrados, y al relanzarlo hace exactamente las 3 llamadas que
+faltan.
+
+```bash
+python scripts/ai_agent/results.py summary results/run.jsonl
+```
+
+## Uso de `regression.py`
+
+```bash
+python scripts/ai_agent/regression.py verify unified/findings.sarif --fingerprint <fp> \
+    --patch-file fix.diff --repo-root .
+python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif --target <fp>
+```
+
 ## Módulos
 
 - **`sarif_parser.py`** — convierte el SARIF unificado en objetos `Finding`
@@ -78,7 +337,22 @@ reproducible" del plan.
   (los diffs del modelo no llevan números de línea, así que se localiza el bloque
   `-` literal y se sustituye por el `+`), crea la rama `fix/ai-remediation-…`,
   commitea y prepara el PR. Dry-run por defecto (aplica en memoria, no toca el
-  repo); `--commit` crea rama+commit local; `--open` además hace push y abre el PR.
+  repo); `--commit` crea rama+commit local (en un worktree aislado, 4.1); `--open`
+  además hace push y abre el PR.
+- **`regression.py`** — comparación pre/post por fingerprint (Paso 4.3):
+  FIXED / NOT_FIXED / NEW / PERSISTING / DISAPPEARED, y `verify_patch` (worktree →
+  baseline → parche → rescan → comparación). Ver "Comparación pre/post" arriba.
+- **`results.py`** — registro JSONL reanudable de cada intento (Paso 4.5): clave,
+  resultado, tokens, tiempos y procedencia. Ver "Registro de resultados" arriba.
+- **`rescan.py`** — rescan local post-parche con CodeQL CLI (Paso 4.2), con la
+  misma versión y suite que CI y el SARIF con forma de artefacto unificado. Ver
+  "Rescan local con CodeQL" arriba.
+- **`worktree.py`** — worktrees aislados para aplicar y verificar parches (Paso
+  4.1). Ver "Aislamiento con worktrees" arriba.
+  ```bash
+  python scripts/ai_agent/worktree.py list
+  python scripts/ai_agent/worktree.py remove fix/ai-remediation-<regla>-<fp8> [--delete-branch]
+  ```
 - **`triage_engine.py`** — orquestador (capstone de la Fase 3): encadena
   parse → filtro (CVSS≥7 ∩ traza) → triaje → (si TP) parche → PR. Sin argumentos
   lista los candidatos; con `--fingerprint … --run` ejecuta un hallazgo de punta a

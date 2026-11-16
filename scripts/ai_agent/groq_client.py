@@ -49,6 +49,31 @@ class Completion:
     model: str
 
 
+@dataclass
+class Usage:
+    """Cost of one LLM call, kept with each decision/patch for the results log (4.5).
+
+    ``seconds`` is wall time including retries/back-off (the overhead users feel);
+    ``model`` is what the API reports it served, to detect silent model changes.
+    """
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    model: str = ""
+    seconds: float = 0.0
+
+
+def timed_complete(client, system: str, user: str) -> tuple[Completion, Usage]:
+    """``client.complete`` plus its Usage (tolerates test doubles without token fields)."""
+    start = time.monotonic()
+    reply = client.complete(system, user)
+    usage = Usage(prompt_tokens=getattr(reply, "prompt_tokens", 0) or 0,
+                  completion_tokens=getattr(reply, "completion_tokens", 0) or 0,
+                  model=getattr(reply, "model", "") or "",
+                  seconds=round(time.monotonic() - start, 2))
+    return reply, usage
+
+
 class GroqClient:
     """Thin wrapper around Groq's chat/completions endpoint."""
 

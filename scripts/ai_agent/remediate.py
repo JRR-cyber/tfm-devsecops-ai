@@ -22,8 +22,9 @@ Usage (live, needs GROQ_API_KEY):
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from groq_client import Usage, timed_complete
 from sarif_parser import Finding, SourceReader
 from strategies import STRATEGIES, ZERO_SHOT, decorate
 from trace_context import render_context
@@ -66,6 +67,7 @@ class Patch:
     explanation: str          # any prose outside the diff block
     strategy: str
     raw: str                  # the model's raw reply
+    usage: Usage = field(default_factory=Usage)   # tokens/time of the call (4.5)
 
 
 def build_prompt(finding: Finding, reader: SourceReader | None = None,
@@ -98,8 +100,10 @@ def remediate(finding: Finding, client, reader: SourceReader | None = None,
     """Build the prompt, ask the model, and parse the proposed diff."""
     system, user = build_prompt(finding, reader, with_trace=with_trace,
                                 with_rag=with_rag, strategy=strategy)
-    reply = client.complete(system, user)
-    return parse_patch(reply.text, strategy=strategy)
+    reply, usage = timed_complete(client, system, user)
+    patch = parse_patch(reply.text, strategy=strategy)
+    patch.usage = usage
+    return patch
 
 
 def main() -> None:

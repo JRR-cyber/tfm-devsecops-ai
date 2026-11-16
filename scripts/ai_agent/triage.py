@@ -23,8 +23,9 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from groq_client import Usage, timed_complete
 from sarif_parser import Finding, SourceReader
 from strategies import STRATEGIES, ZERO_SHOT, decorate
 from trace_context import render_context
@@ -86,6 +87,7 @@ class TriageVerdict:
     rationale: str
     with_trace: bool          # which condition produced it (for Phase 5.3)
     raw: str                  # the model's raw reply, kept for audit
+    usage: Usage = field(default_factory=Usage)   # tokens/time of the call (4.5)
 
 
 def build_prompt(finding: Finding, reader: SourceReader | None = None,
@@ -131,8 +133,10 @@ def decide(finding: Finding, client, reader: SourceReader | None = None,
     """
     system, user = build_prompt(finding, reader, with_trace=with_trace,
                                 with_rag=with_rag, strategy=strategy)
-    reply = client.complete(system, user)
-    return parse_verdict(reply.text, with_trace=with_trace)
+    reply, usage = timed_complete(client, system, user)
+    verdict = parse_verdict(reply.text, with_trace=with_trace)
+    verdict.usage = usage
+    return verdict
 
 
 def main() -> None:
