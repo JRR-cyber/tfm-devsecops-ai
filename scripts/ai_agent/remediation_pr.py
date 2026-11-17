@@ -188,13 +188,22 @@ def prepare_pr(finding: Finding, diff: str, repo_root: Path, verdict: str | None
         report.append(f"committed on {branch}: {sha[:7]}")
 
         if open_pr:
-            _git(["push", "-u", "origin", branch], repo_root)
+            push = _git(["push", "-u", "origin", branch], repo_root)
+            if push.returncode != 0:
+                report.append(f"PUSH FAILED (branch kept locally): {push.stderr.strip()[-300:]}")
+                return "\n".join(report)
+            # The body carries emojis and accents: send it as UTF-8 whatever the
+            # console code page is (cp1252 on Windows broke the first live demo).
             pr = subprocess.run(
                 ["gh", "pr", "create", "--base", base, "--head", branch,
                  "--title", title, "--body-file", "-", *label_args,
                  *(["--draft"] if draft else [])],
-                cwd=repo_root, input=body, text=True, capture_output=True)
-            report.append(pr.stdout.strip() or pr.stderr.strip())
+                cwd=repo_root, input=body, text=True, encoding="utf-8", capture_output=True)
+            if pr.returncode != 0:
+                report.append(f"PR NOT CREATED (branch {branch} is pushed; retry with gh pr create "
+                              f"--head {branch}): {pr.stderr.strip()[-300:]}")
+            else:
+                report.append(pr.stdout.strip())
         else:
             report.append(f"(local only; open with: gh pr create --base {base} --head {branch})")
         return "\n".join(report)

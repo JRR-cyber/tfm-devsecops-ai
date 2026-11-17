@@ -194,7 +194,8 @@ def publish(decision: Decision, finding: Finding, repo_root: Path, base: str = "
                           f"title: {decision.title}", "", decision.body])
     res = subprocess.run(["gh", "issue", "create", "--title", decision.title, "--body-file", "-",
                           *[x for l in decision.labels for x in ("--label", l)]],
-                         cwd=repo_root, input=decision.body, capture_output=True, text=True)
+                         cwd=repo_root, input=decision.body, capture_output=True, text=True,
+                         encoding="utf-8")
     return res.stdout.strip() or res.stderr.strip()
 
 

@@ -607,6 +607,35 @@ salvedades; T2 y T1 `module-load` → salvedad; T1 con sensibilidad en la línea
 del sink → sin salvedad; efectos colaterales; escalado → issue sin diff; dry-run
 del PR con el parche real del PR #7 (se aplica y muestra las etiquetas).
 
+**Demo real de punta a punta (17-11-2026,
+[PR #10](https://github.com/JRR-cyber/tfm-devsecops-ai/pull/10), borrador, no se
+fusiona).** gpt-oss-120b (plan gratuito, zero-shot con traza y RAG) sobre la SQLi
+de búsqueda (JS-02, `search.ts:23`):
+
+| | Intento 1 | Intento 2 |
+|---|---|---|
+| Parche | Consulta parametrizada **con** `type: QueryTypes.SELECT` | Consulta parametrizada, sin `type` |
+| CodeQL | FIXED, 0 NEW | FIXED, 0 NEW |
+| Ataques (9) | 0 funcionan | 0 funcionan |
+| Funcionales (6) | **6 fallan** | 6 pasan |
+| Resultado | rechazado | **ACCEPTED** → PR `ai-fixed` |
+
+El primer parche eliminaba la vulnerabilidad y CodeQL y el exploit lo daban por
+bueno, pero `QueryTypes.SELECT` cambia lo que devuelve `sequelize.query` (filas
+en lugar de `[filas, metadatos]`), y el `.then(([products]) => …)` siguiente se
+quedaba con la primera fila: **la búsqueda de productos quedaba rota**. Es el
+caso que motivó D9, esta vez producido por el modelo real; el bucle lo corrigió
+con el feedback de los tests. Etiqueta `ai-fixed` sin salvedades (hay oráculo
+funcional y de ataque; el hallazgo vecino de la línea 22 no cambió). Coste del caso
+completo (triaje y 2 intentos): 4.700 + 1.227 tokens (~$0,0014); 4 s de LLM y
+188 s de rescan: el cuello de botella es CodeQL, no la API.
+
+Fallo encontrado por la demo: el cuerpo del PR (con emojis) se enviaba a `gh` con
+la codificación de la consola de Windows (cp1252) y la creación del PR falló
+**después** del push. Ahora el texto va en UTF-8, se comprueba el push y, si falla
+la creación del PR, el informe lo dice (la rama queda subida) en vez de terminar
+con una traza.
+
 ```bash
 python scripts/ai_agent/publish.py labels [--apply]      # crea/actualiza las 3 etiquetas en GitHub
 python scripts/ai_agent/triage_engine.py unified/findings.sarif --repo-root . \
