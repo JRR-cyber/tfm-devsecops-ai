@@ -5,7 +5,16 @@
  "cases": {
   "code-injection/pixl-class_1.0.0": {
    "tier": "T2",
-   "reason": "no test suite: no test script and no tests in the tarball or the repository"
+   "reason": "no test suite: no test script and no tests in the tarball or the repository",
+   "driver": "benchmarks/oracles/t2/code-injection__pixl-class_1.0.0.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 6.5,
+    "base_summary": "7 inputs: 7 same, 0 different, 0 driver errors",
+    "sensitivity": "sink-line",
+    "mutant_exit": 1,
+    "mutant_summary": "7 inputs: 5 same, 2 different, 0 driver errors"
+   }
   },
   "code-injection/underscore_1.13.0-0": {
    "tier": "T1",
@@ -41,11 +50,29 @@
      "rejected": "suite still passes with a throw before the sink line: it never reaches the vulnerable code"
     }
    },
-   "notes": "npm test is 'xo && ava': the xo linter is left out."
+   "notes": "npm test is 'xo && ava': the xo linter is left out.",
+   "driver": "benchmarks/oracles/t2/command-injection__apex-publish-static-files_2.0.0.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 7.2,
+    "base_summary": "7 inputs: 7 same, 0 different, 0 driver errors",
+    "sensitivity": "sink-line",
+    "mutant_exit": 1,
+    "mutant_summary": "7 inputs: 3 same, 4 different, 0 driver errors"
+   }
   },
   "command-injection/async-git_1.13.1": {
    "tier": "T2",
-   "reason": "tests not in the tarball and the repository has no tag for 1.13.1"
+   "reason": "tests not in the tarball and the repository has no tag for 1.13.1",
+   "driver": "benchmarks/oracles/t2/command-injection__async-git_1.13.1.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 7.0,
+    "base_summary": "8 inputs: 8 same, 0 different, 0 driver errors",
+    "sensitivity": "sink-line",
+    "mutant_exit": 1,
+    "mutant_summary": "8 inputs: 3 same, 5 different, 0 driver errors"
+   }
   },
   "command-injection/bestzip_2.1.6": {
    "tier": "T1",
@@ -96,6 +123,15 @@
      "mutant_exit": 0,
      "rejected": "suite still passes with a throw before the sink line: it never reaches the vulnerable code"
     }
+   },
+   "driver": "benchmarks/oracles/t2/command-injection__diskusage-ng_0.2.6.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 6.9,
+    "base_summary": "6 inputs: 6 same, 0 different, 0 driver errors",
+    "sensitivity": "sink-line",
+    "mutant_exit": 1,
+    "mutant_summary": "6 inputs: 0 same, 6 different, 0 driver errors"
    }
   },
   "command-injection/dns-sync_0.1.0": {
@@ -113,7 +149,16 @@
   },
   "command-injection/giting_0.0.7": {
    "tier": "T2",
-   "reason": "no test suite and the repository is no longer available"
+   "reason": "no test suite and the repository is no longer available",
+   "driver": "benchmarks/oracles/t2/command-injection__giting_0.0.7.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 11.1,
+    "base_summary": "5 inputs: 5 same, 0 different, 0 driver errors",
+    "sensitivity": "sink-line",
+    "mutant_exit": 1,
+    "mutant_summary": "5 inputs: 2 same, 3 different, 0 driver errors"
+   }
   },
   "command-injection/macaddress_0.2.8": {
    "tier": "T2",
@@ -129,19 +174,55 @@
      "rejected": "suite still passes with a throw before the sink line: it never reaches the vulnerable code"
     }
    },
-   "notes": "Smoke-level script: it throws if no valid MAC address is returned."
+   "notes": "Smoke-level script: it throws if no valid MAC address is returned.",
+   "driver": "benchmarks/oracles/t2/command-injection__macaddress_0.2.8.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 5.7,
+    "base_summary": "5 inputs: 5 same, 0 different, 0 driver errors",
+    "sensitivity": "sink-line",
+    "mutant_exit": 1,
+    "mutant_summary": "5 inputs: 0 same, 5 different, 0 driver errors"
+   }
   },
   "command-injection/portprocesses_1.0.4": {
    "tier": "T2",
-   "reason": "no test suite (test script is the npm placeholder)"
+   "reason": "no test suite (test script is the npm placeholder)",
+   "driver": "benchmarks/oracles/t2/command-injection__portprocesses_1.0.4.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 5.7,
+    "base_summary": "5 inputs: 5 same, 0 different, 0 driver errors",
+    "sensitivity": "sink-line",
+    "mutant_exit": 1,
+    "mutant_summary": "5 inputs: 0 same, 5 different, 0 driver errors"
+   }
   },
   "command-injection/react-dev-utils_11.0.0": {
    "tier": "T2",
-   "reason": "tests live in the create-react-app monorepo and need its workspace build; out of scope for a per-package harness"
+   "reason": "tests live in the create-react-app monorepo and need its workspace build; out of scope for a per-package harness",
+   "driver": "benchmarks/oracles/t2/command-injection__react-dev-utils_11.0.0.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 30.8,
+    "base_summary": "4 inputs: 4 same, 0 different, 0 driver errors",
+    "sensitivity": "sink-line",
+    "mutant_exit": 1,
+    "mutant_summary": "4 inputs: 0 same, 4 different, 0 driver errors"
+   }
   },
   "command-injection/thi.ng-egf_0.3.0": {
    "tier": "T2",
-   "reason": "tests live in the thi.ng/umbrella monorepo (TypeScript sources and workspace build); the tarball ships only compiled output"
+   "reason": "tests live in the thi.ng/umbrella monorepo (TypeScript sources and workspace build); the tarball ships only compiled output",
+   "driver": "benchmarks/oracles/t2/command-injection__thi.ng-egf_0.3.0.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 15.3,
+    "base_summary": "4 inputs: 4 same, 0 different, 0 driver errors",
+    "sensitivity": "module-load",
+    "mutant_exit": 1,
+    "mutant_summary": "4 inputs: 0 same, 4 different, 0 driver errors"
+   }
   },
   "command-injection/whereis_0.4.0": {
    "tier": "T2",
@@ -156,6 +237,15 @@
      "mutant_exit": 0,
      "rejected": "suite still passes with a throw before the sink line: it never reaches the vulnerable code"
     }
+   },
+   "driver": "benchmarks/oracles/t2/command-injection__whereis_0.4.0.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 5.7,
+    "base_summary": "5 inputs: 5 same, 0 different, 0 driver errors",
+    "sensitivity": "sink-line",
+    "mutant_exit": 1,
+    "mutant_summary": "5 inputs: 0 same, 5 different, 0 driver errors"
    }
   },
   "path-traversal/m-server_1.4.0": {
@@ -173,15 +263,42 @@
      "rejected": "suite still passes with a throw before the sink line: it never reaches the vulnerable code"
     }
    },
-   "notes": "mocha is not declared as a devDependency: mocha 5.2.0 is pinned."
+   "notes": "mocha is not declared as a devDependency: mocha 5.2.0 is pinned.",
+   "driver": "benchmarks/oracles/t2/path-traversal__m-server_1.4.0.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 8.9,
+    "base_summary": "7 inputs: 7 same, 0 different, 0 driver errors",
+    "sensitivity": "sink-line",
+    "mutant_exit": 1,
+    "mutant_summary": "7 inputs: 2 same, 5 different, 0 driver errors"
+   }
   },
   "path-traversal/serve-here.js_1.1.0": {
    "tier": "T2",
-   "reason": "no test suite: test/ is a static demo site, test script is the npm placeholder"
+   "reason": "no test suite: test/ is a static demo site, test script is the npm placeholder",
+   "driver": "benchmarks/oracles/t2/path-traversal__serve-here.js_1.1.0.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 9.6,
+    "base_summary": "7 inputs: 7 same, 0 different, 0 driver errors",
+    "sensitivity": "sink-line",
+    "mutant_exit": 1,
+    "mutant_summary": "7 inputs: 0 same, 7 different, 0 driver errors"
+   }
   },
   "path-traversal/tinyserver2_0.5.2": {
    "tier": "T2",
-   "reason": "no test suite and the repository is unreachable"
+   "reason": "no test suite and the repository is unreachable",
+   "driver": "benchmarks/oracles/t2/path-traversal__tinyserver2_0.5.2.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 8.6,
+    "base_summary": "6 inputs: 6 same, 0 different, 0 driver errors",
+    "sensitivity": "sink-line",
+    "mutant_exit": 1,
+    "mutant_summary": "6 inputs: 0 same, 6 different, 0 driver errors"
+   }
   },
   "prototype-pollution/dset_1.0.0": {
    "tier": "T1",
@@ -388,5 +505,5 @@
    }
   }
  },
- "validated": "2026-11-16"
+ "validated": "2026-11-17"
 }

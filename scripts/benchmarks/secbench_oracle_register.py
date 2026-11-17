@@ -18,6 +18,11 @@ and writes the result back into the file:
 A spec that fails either check is demoted to ``T2`` with the reason. The file is
 the pre-registration: it is committed before any Phase 5 patch exists.
 
+``T2`` cases (differential driver in ``benchmarks/oracles/t2/``) get the same two
+checks: on the base the original and the (identical) copy must give the same
+observations for every input, and on the mutant at least one input must differ.
+A driver failing them is reported (``rejected``) to be fixed, not demoted.
+
 Usage:
     python scripts/benchmarks/secbench_oracle_register.py [case-id-substring ...]
 """
@@ -90,12 +95,39 @@ def validate(cid: str, spec: dict, sink: tuple[str, int]) -> dict:
     return result
 
 
+def validate_t2(cid: str, sink: tuple[str, int]) -> dict:
+    """T2 driver: identical observations on the base, different on the mutant."""
+    code, out, seconds = ob.run_diff(REPO, cid, REPO)
+    summary = next((l for l in reversed(out.splitlines()) if " inputs: " in l), "")
+    result = {"base_exit": code, "base_seconds": seconds, "base_summary": summary}
+    if code != 0:
+        result["rejected"] = f"driver does not reproduce the original on the base (exit {code})"
+        result["base_tail"] = " | ".join(l.strip() for l in out.splitlines()[-6:] if l.strip())[-400:]
+        return result
+    with tempfile.TemporaryDirectory() as tmp:
+        tree, mode = mutant_tree(cid, sink[0], sink[1], Path(tmp))
+        mcode, mout, _ = ob.run_diff(tree, cid, REPO)
+    msummary = next((l for l in reversed(mout.splitlines()) if " inputs: " in l), "")
+    result.update({"sensitivity": mode, "mutant_exit": mcode, "mutant_summary": msummary})
+    if mcode != 1:
+        result["rejected"] = ("driver does not notice a throw before the sink line "
+                              f"(exit {mcode}): its inputs never reach the vulnerable code")
+    return result
+
+
 def main() -> None:
     only = sys.argv[1:]
     data = json.loads(REGISTRY.read_text(encoding="utf-8"))
     sink = sinks()
     for cid, spec in data["cases"].items():
         if only and not any(o in cid for o in only):
+            continue
+        if spec.get("tier") == "T2":
+            if (REPO / ob.T2_DRIVERS / ob.driver_name(cid)).is_file():
+                v = validate_t2(cid, sink[cid])
+                spec["driver"] = f"{ob.T2_DRIVERS.as_posix()}/{ob.driver_name(cid)}"
+                spec["validation"] = v
+                print(f"{cid:52s} T2  {json.dumps(v)[:200]}", flush=True)
             continue
         if spec.get("tier") != "T1" and "t1_candidate" not in spec:
             continue
@@ -112,7 +144,8 @@ def main() -> None:
             data["cases"][cid].pop("reason", None)
         print(f"{cid:52s} {data['cases'][cid]['tier']}  {json.dumps(v)[:160]}", flush=True)
     data["validated"] = date.today().isoformat()
-    REGISTRY.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    REGISTRY.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n",
+                        encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":

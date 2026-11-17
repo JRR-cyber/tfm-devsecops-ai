@@ -70,7 +70,7 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 | 4.5 | Registro JSONL por intento (reanudable; tokens y tiempo) | **hecho** — `results.py` |
 | 4.6 | Decisión del oráculo funcional (`dataset.md` §7) | **hecho** — [D9](../../docs/benchmark/decisions.md): seguridad doble (CodeQL + exploit sobre el parche) y funcional por niveles (tests de API en Juice Shop, suite del paquete T1, diferencial T2) |
 | 4.7 | Bucle reflexivo: hasta 3 intentos, con el motivo del rechazo como feedback | **hecho** — `repair_loop.py` |
-| 4.8 | Implementación de los oráculos de D9 (preregistro + ejecutores) | **en curso** — hecho: Juice Shop, exploit SecBench, T1 (17 casos), conexión al bucle; falta T2 (13 casos) |
+| 4.8 | Implementación de los oráculos de D9 (preregistro + ejecutores) | **hecho** — `oracle_juiceshop.py`, `oracle_secbench.py`: Juice Shop (3), exploit SecBench (30), T1 (17), T2 (13) |
 | 4.9 | Etiquetado y escalado de PRs | pendiente |
 | 4.10 | Ensayo de punta a punta sobre los 33 casos | pendiente |
 
@@ -415,7 +415,7 @@ lanza una excepción y no se registra.
 | `juice-shop-exploit` | 3 Juice Shop | Los tests *de ataque* de la ruta dejan de pasar (seguridad dinámica) | `oracle_juiceshop.py` |
 | `secbench-exploit` | 30 SecBench | El exploit oficial de SecBench.js deja de funcionar contra el paquete parcheado | `oracle_secbench.py` |
 | `secbench-t1-suite` | 17 SecBench | La suite de tests del propio paquete sigue pasando | `oracle_secbench.py` |
-| T2 diferencial | 13 SecBench | Mismas salidas que la versión original con entradas benignas | pendiente (4.8b) |
+| `secbench-t2-differential` | 13 SecBench | Mismo comportamiento que la versión original con entradas benignas preregistradas | `oracle_secbench.py` |
 
 ### Preregistro
 
@@ -427,9 +427,10 @@ Fijado antes de que exista ningún parche de la Fase 5 y versionado en
   los cuatro tests "SQL Injection fails…" afirman un error SQLITE, es decir, que la
   entrada llega al parser: son de vulnerabilidad). Los 41 pasan sobre la base.
 - **`secbench-functional.json`**: para cada caso, el nivel (T1/T2), de dónde salen
-  los tests (tarball o repositorio en el commit de la etiqueta de la versión), el
-  comando curado y su validación. Lo genera y valida
+  los tests (tarball o repositorio en el commit de la etiqueta de la versión) y el
+  comando curado, o el driver T2, con su validación. Lo valida
   `scripts/benchmarks/secbench_oracle_register.py`.
+- **`t2/`**: los 13 drivers diferenciales con sus entradas benignas.
 
 ### Juice Shop
 
@@ -505,6 +506,54 @@ target;` como primera línea de `set()`) **engaña al exploit** ("the exploit no
 longer succeeds") y **T1 lo detecta** (23 de 26 tests fallan). Sin oráculo
 funcional, contaría como arreglo.
 
+### SecBench.js: T2 (diferencial)
+
+Para los 13 casos sin suite válida, un **driver** preregistrado
+(`benchmarks/oracles/t2/<caso>.js`) llama al mismo punto de entrada que ataca el
+exploit, pero con **entradas benignas** fijadas antes de cualquier parche, y
+devuelve lo observable. `run_diff.sh` instala la versión vulnerable dos veces
+(original, y con el `src/` parcheado encima) y `diff_runner.js` ejecuta cada
+entrada contra cada instalación **en un proceso nuevo** (sin estado compartido) y
+compara. Una diferencia en cualquier entrada es una regresión funcional.
+
+Qué se observa, según la clase:
+
+| Clase | Observación |
+|---|---|
+| command-injection (10) | `child_process` interceptado: los comandos se registran como **argv**, no como texto, para que formas equivalentes coincidan (`exec("git reset 'x'")` = `execFile("git", ["reset", "x"])`); las tuberías se separan en segmentos y `echo X \| cmd` se registra como `cmd` con X por stdin (= `execFileSync(cmd, args, {input: X})`). Las salidas falsas de los comandos son plausibles (`df`, `lsof`, `ifconfig`…) para que el código llegue a procesarlas. Se compara también el valor devuelto |
+| path-traversal (3) | El servidor real se arranca sobre un sitio de prueba fijo y se compara la respuesta (estado, tipo, cuerpo) a rutas legítimas, a un listado de directorio y a un fichero inexistente |
+| code-injection (pixl-class) | El comportamiento de las clases que crea `create()`: constructor heredado, métodos, estáticos, mixins |
+
+Decisiones de diseño de los drivers (documentadas en cada uno): `macaddress`
+simula `darwin` para llegar a `lib/unix.js` (en Linux carga `lib/linux.js`; por eso
+su suite T1 no llegaba al sink); `whereis` no prueba el caso "no encontrado",
+que solo llega a ramas exclusivas de Windows que un arreglo puede eliminar con
+razón; `tinyserver2` no prueba un fichero inexistente, porque el original responde
+200 con cuerpo vacío y un arreglo puede pasar a 404 con razón.
+
+**Validación** (misma regla que T1): sobre la base, original y copia dan las
+mismas observaciones en todas las entradas (también comprueba que el driver es
+determinista); con el `throw` antes del sink, alguna entrada cambia. Los 13
+drivers la superan (`thi.ng-egf` con sensibilidad `module-load`: su sink está
+dentro de una expresión flecha). Además se revisó que lo observado tiene sentido,
+no solo que coincide.
+
+### ¿Aceptan los oráculos los arreglos correctos?
+
+Contraprueba: se aplicó como "parche" la versión corregida oficial de los 10 casos
+que la tienen vendorizada (`fixed/`), con los tres oráculos:
+
+| Resultado | Casos |
+|---|---|
+| Exploit: **acepta los 10** | — |
+| Funcional: acepta | underscore, connection-tester, dns-sync, madlib-object-utils, hosted-git-info |
+| Funcional: rechaza por un **defecto real del arreglo oficial** | **giting** 0.0.8: aplica `encodeURIComponent` a la rama, así que `feature/login` pasa a `feature%2Flogin` y las ramas con `/` dejan de funcionar |
+| Funcional: rechaza por **cambios ajenos** de la nueva versión | set-value 4.0.1 (versión mayor, cambia la API), hoek 5.0.3 (cambian `escape*` y errores de base64), jsonpointer 5.0.0 (el tarball ya no trae `test.js`), serve-here.js 1.2.0 (nueva dependencia `commander` que la 1.1.0 no instala) |
+
+Ningún rechazo es un error del oráculo. Los cuatro por cambios ajenos son el
+motivo por el que D9 descartó comparar contra la versión corregida: los parches del
+agente son de un solo fichero y no arrastran esos cambios.
+
 **Prueba de punta a punta con oráculos** (CodeQL, worktrees y LLM con guion, SQLi
 de `login.ts`): el parche cosmético se rechaza por CodeQL (reubicado) **y** por el
 oráculo dinámico (5/5 ataques siguen funcionando); el arreglo del PR #7 da FIXED,
@@ -514,7 +563,8 @@ oráculo dinámico (5/5 ataques siguen funcionando); el arreglo del PR #7 da FIX
 python scripts/ai_agent/oracle_juiceshop.py --tree . --target src/app/juice-shop/routes/login.ts
 python scripts/ai_agent/oracle_secbench.py exploit --tree . --case prototype-pollution/set-value_3.0.0
 python scripts/ai_agent/oracle_secbench.py suite --case prototype-pollution/set-value_3.0.0
-python scripts/benchmarks/secbench_oracle_register.py [caso ...]   # revalidar el preregistro T1
+python scripts/ai_agent/oracle_secbench.py diff --case command-injection/async-git_1.13.1
+python scripts/benchmarks/secbench_oracle_register.py [caso ...]   # revalidar el preregistro (T1 y T2)
 ```
 
 ## Uso de `regression.py`

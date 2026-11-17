@@ -8,7 +8,14 @@ tarball of that exact version, so only the patch differs). A correct fix makes t
 exploit fail. CodeQL saying FIXED while the exploit still works is an
 **incomplete fix**, reported by this check.
 
-Functional oracle: added by the T1/T2 tiers of D9 (``functional_check``).
+Functional oracle (D9 tiers, pre-registered in ``benchmarks/oracles/``):
+
+- **T1** ``functional_check`` — the package's own test suite (``run_suite.sh``).
+- **T2** ``differential_check`` — a pre-registered driver
+  (``benchmarks/oracles/t2/<case>.js``) calls the vulnerable entry point with
+  benign inputs on the original and the patched package and compares what is
+  observable (return values, intercepted commands as argv, HTTP responses)
+  (``run_diff.sh`` + ``diff_runner.js``).
 
 Exit codes of the harness: 0 exploited, 1 not exploited, 3 install failed,
 4 overlay failed. 3 and 4 are infrastructure errors (raised, not a patch outcome).
@@ -162,6 +169,44 @@ def functional_check(tree: Path, cid: str, spec: dict, repo_root: Path) -> Check
                        seconds)
 
 
+# --------------------------------------------------------------- functional (T2)
+
+T2_DRIVERS = Path("benchmarks/oracles/t2")
+
+
+def driver_name(cid: str) -> str:
+    return cid.replace("/", "__") + ".js"
+
+
+def run_diff(tree: Path, cid: str, repo_root: Path) -> tuple[int, str, float]:
+    """Compare the pre-registered benign inputs on the original vs ``tree``'s ``src/``."""
+    case = load_case(tree, cid)
+    src = (tree / CASES / cid / "src").resolve()
+    drivers = (repo_root / T2_DRIVERS).resolve()
+    start = time.monotonic()
+    res = subprocess.run(
+        ["docker", "run", "--rm", "-v", f"{src}:/pkg:ro", "-v", f"{drivers}:/t2:ro",
+         "-v", "tfm-npm-cache:/root/.npm",
+         IMAGE, "run_diff", case["package"], case["vulnerable_version"], driver_name(cid)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TIMEOUT)
+    return res.returncode, res.stdout + res.stderr, round(time.monotonic() - start, 1)
+
+
+def differential_check(tree: Path, cid: str, repo_root: Path) -> CheckResult:
+    code, out, seconds = run_diff(tree, cid, repo_root)
+    if code not in (0, 1):
+        raise RuntimeError(f"T2 oracle error (exit {code}) for {cid}: {out[-_TAIL:]}")
+    if code == 0:
+        return CheckResult("secbench-t2-differential", True,
+                           "same behaviour as the original on every pre-registered benign input",
+                           seconds)
+    diffs = [l for l in out.splitlines() if l.startswith(("DIFF", "  original:", "  patched:"))]
+    return CheckResult("secbench-t2-differential", False,
+                       "the patched package behaves differently from the original on benign "
+                       "(non-malicious) inputs, so legitimate functionality changed: "
+                       + " | ".join(diffs)[-_TAIL:], seconds)
+
+
 def checks(repo_root: Path):
     """The D9 checks for SecBench.js findings, in the form ``verify_patch`` expects."""
     registry = load_registry(repo_root) if (repo_root / REGISTRY).is_file() else {}
@@ -177,7 +222,7 @@ def checks(repo_root: Path):
             return None
         if spec["tier"] == "T1":
             return functional_check(tree, cid, spec, repo_root)
-        return None   # T2 (differential) is added in the next sub-step
+        return differential_check(tree, cid, repo_root)
 
     return [exploit, functional]
 
@@ -199,7 +244,17 @@ def main() -> None:
     su.add_argument("--commit", help="probe: commit of the version")
     su.add_argument("--paths", help="probe: comma-separated test paths to take from the repo")
     su.add_argument("--extra-dev", default="", help="probe: extra npm packages")
+    di = sub.add_parser("diff", help="run a case's T2 differential driver on a tree")
+    di.add_argument("--tree", type=Path, default=Path("."))
+    di.add_argument("--repo-root", type=Path, default=Path("."))
+    di.add_argument("--case", required=True)
     args = parser.parse_args()
+
+    if args.cmd == "diff":
+        code, out, seconds = run_diff(args.tree.resolve(), args.case, args.repo_root.resolve())
+        print(out.rstrip())
+        print(f"\nEXIT {code}  ({seconds}s)")
+        raise SystemExit(code)
 
     if args.cmd == "exploit":
         r = exploit_check(args.tree.resolve(), args.case)
