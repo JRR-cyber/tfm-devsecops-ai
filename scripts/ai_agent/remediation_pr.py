@@ -134,7 +134,7 @@ def _git(args: list[str], repo_root: Path) -> subprocess.CompletedProcess:
 def prepare_pr(finding: Finding, diff: str, repo_root: Path, verdict: str | None = None,
                commit: bool = False, open_pr: bool = False, base: str = "main",
                body: str | None = None, labels: list[str] | None = None,
-               title: str | None = None) -> str:
+               title: str | None = None, draft: bool = False) -> str:
     """Apply the patch and (optionally) create the branch/commit/PR.
 
     Default (commit=False): dry-run — apply in memory and return a report without
@@ -191,7 +191,8 @@ def prepare_pr(finding: Finding, diff: str, repo_root: Path, verdict: str | None
             _git(["push", "-u", "origin", branch], repo_root)
             pr = subprocess.run(
                 ["gh", "pr", "create", "--base", base, "--head", branch,
-                 "--title", title, "--body-file", "-", *label_args],
+                 "--title", title, "--body-file", "-", *label_args,
+                 *(["--draft"] if draft else [])],
                 cwd=repo_root, input=body, text=True, capture_output=True)
             report.append(pr.stdout.strip() or pr.stderr.strip())
         else:

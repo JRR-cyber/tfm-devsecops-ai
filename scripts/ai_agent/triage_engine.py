@@ -49,6 +49,8 @@ def main() -> None:
     parser.add_argument("--commit", action="store_true", help="create the fix branch + commit")
     parser.add_argument("--open", action="store_true",
                         help="publish: push + PR (verified fix) or issue (escalated), with gh")
+    parser.add_argument("--draft", action="store_true",
+                        help="open the PR as a draft titled [DEMO · NO MERGE] (benchmark demos)")
     parser.add_argument("--codeql", help="path to the CodeQL CLI (default: $CODEQL_CLI or PATH)")
     parser.add_argument("--no-oracles", action="store_true", help="CodeQL only (skip the D9 oracles)")
     parser.add_argument("--log", type=Path, default=Path("results/dev/engine.jsonl"))
@@ -102,7 +104,8 @@ def main() -> None:
     print(loop.summary() + "\n")
     decision = decide_publication(target, loop, repo_root, verdict=verdict)
     print(f"publication: {decision.kind}, labels {decision.labels}")
-    print(publish(decision, target, repo_root, commit=args.commit, open_=args.open))
+    print(publish(decision, target, repo_root, commit=args.commit, open_=args.open,
+                  draft=args.draft))
 
 
 if __name__ == "__main__":

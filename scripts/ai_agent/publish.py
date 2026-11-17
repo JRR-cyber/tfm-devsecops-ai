@@ -178,13 +178,17 @@ def ensure_labels(repo_root: Path, apply: bool = False) -> list[str]:
 
 
 def publish(decision: Decision, finding: Finding, repo_root: Path, base: str = "main",
-            commit: bool = False, open_: bool = False) -> str:
-    """Dry-run (default) or publish the decision; returns a report."""
+            commit: bool = False, open_: bool = False, draft: bool = False) -> str:
+    """Dry-run (default) or publish the decision; returns a report.
+
+    ``draft`` opens the PR as a draft (demos on the benchmark: never to be merged).
+    """
     if decision.kind == "pr":
         from remediation_pr import prepare_pr
+        title = ("[DEMO · NO MERGE] " if draft else "") + decision.title
         return prepare_pr(finding, decision.diff, repo_root, commit=commit or open_, open_pr=open_,
                           base=base, body=decision.body, labels=decision.labels,
-                          title=decision.title)
+                          title=title, draft=draft)
     if not open_:
         return "\n".join([f"(dry-run) gh issue create --label {','.join(decision.labels)}",
                           f"title: {decision.title}", "", decision.body])
