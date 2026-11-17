@@ -32,4 +32,5 @@ RUN npm init -y >/dev/null && npm install --no-audit --no-fund sleep@6.3.0
 
 COPY run_case.sh /usr/local/bin/run_case
 COPY run_evidence.sh /usr/local/bin/run_evidence
-RUN chmod +x /usr/local/bin/run_case /usr/local/bin/run_evidence
+COPY run_suite.sh /usr/local/bin/run_suite
+RUN chmod +x /usr/local/bin/run_case /usr/local/bin/run_evidence /usr/local/bin/run_suite

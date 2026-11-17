@@ -172,6 +172,13 @@ def repair(finding: Finding, client, repo_root: Path, *, reader: SourceReader | 
     return result
 
 
+def oracle_checks(repo_root: Path) -> list[Check]:
+    """All D9 oracles (4.8); each one returns None for findings it does not cover."""
+    import oracle_juiceshop
+    import oracle_secbench
+    return oracle_juiceshop.checks(repo_root) + oracle_secbench.checks(repo_root)
+
+
 def main() -> None:
     import argparse
 
@@ -192,6 +199,8 @@ def main() -> None:
     parser.add_argument("--codeql", help="path to the CodeQL CLI (default: $CODEQL_CLI or PATH)")
     parser.add_argument("--log", type=Path, default=Path("results/dev/repair.jsonl"),
                         help="results log (default under results/, which git ignores)")
+    parser.add_argument("--no-oracles", action="store_true",
+                        help="CodeQL only: skip the D9 oracles (exploit / functional tests)")
     args = parser.parse_args()
 
     findings = parse_sarif(args.sarif, args.repo_root)
@@ -211,7 +220,8 @@ def main() -> None:
         print(f"(repaired {log.repaired} truncated line(s) in {args.log})")
     result = repair(target, GroqClient(), args.repo_root, strategy=args.strategy,
                     with_trace=not args.no_trace, with_rag=not args.no_rag,
-                    max_attempts=args.max_attempts, base=args.base, log=log, cli=cli)
+                    max_attempts=args.max_attempts, base=args.base, log=log, cli=cli,
+                    checks=None if args.no_oracles else oracle_checks(args.repo_root.resolve()))
     print(result.summary())
     if result.accepted_diff:
         print("\naccepted patch:\n" + result.accepted_diff)

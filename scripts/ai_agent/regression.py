@@ -166,8 +166,9 @@ class CheckResult:
 
 
 # An oracle receives the target finding and the patched worktree's path, after the
-# post rescan, while the worktree still exists.
-Check = Callable[[Finding, Path], CheckResult]
+# post rescan, while the worktree still exists. It returns None when it does not
+# apply to that finding (e.g. the Juice Shop oracle on a SecBench case).
+Check = Callable[[Finding, Path], "CheckResult | None"]
 
 
 @dataclass
@@ -225,7 +226,7 @@ def verify_patch(finding: Finding, diff: str, repo_root: Path, base: str = "main
         pre_findings = parse_sarif(baseline_dir / "codeql.sarif")
         post_findings = parse_sarif(post.sarif)
         comparison = compare(pre_findings, post_findings, finding.label_key)
-        results = [check(finding, wt.path) for check in checks or []]
+        results = [r for r in (check(finding, wt.path) for check in checks or []) if r is not None]
         return Verification(True, result.detail, comparison, cached, seconds, results)
 
 

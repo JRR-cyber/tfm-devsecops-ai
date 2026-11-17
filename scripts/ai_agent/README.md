@@ -70,7 +70,7 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 | 4.5 | Registro JSONL por intento (reanudable; tokens y tiempo) | **hecho** — `results.py` |
 | 4.6 | Decisión del oráculo funcional (`dataset.md` §7) | **hecho** — [D9](../../docs/benchmark/decisions.md): seguridad doble (CodeQL + exploit sobre el parche) y funcional por niveles (tests de API en Juice Shop, suite del paquete T1, diferencial T2) |
 | 4.7 | Bucle reflexivo: hasta 3 intentos, con el motivo del rechazo como feedback | **hecho** — `repair_loop.py` |
-| 4.8 | Implementación de los oráculos de D9 (preregistro + ejecutores) | pendiente |
+| 4.8 | Implementación de los oráculos de D9 (preregistro + ejecutores) | **en curso** — hecho: Juice Shop, exploit SecBench, T1 (17 casos), conexión al bucle; falta T2 (13 casos) |
 | 4.9 | Etiquetado y escalado de PRs | pendiente |
 | 4.10 | Ensayo de punta a punta sobre los 33 casos | pendiente |
 
@@ -399,6 +399,124 @@ python scripts/ai_agent/repair_loop.py unified/findings.sarif --fingerprint <fp>
 python scripts/ai_agent/results.py summary results/dev/repair.jsonl
 ```
 
+## Oráculos de verificación de D9 (4.8)
+
+El 4.8 implementa los oráculos que decidió [D9](../../docs/benchmark/decisions.md).
+Se conectan al bucle (4.7) como `checks` de `verify_patch`: se ejecutan sobre el
+worktree parcheado, después del rescan, y un oráculo que falla rechaza el intento
+y su motivo llega al modelo como feedback. `repair_loop.py` los activa por
+defecto (`--no-oracles` deja solo CodeQL). Un oráculo que no aplica a un hallazgo
+devuelve `None`; un fallo de infraestructura (Docker, red, registro desfasado)
+lanza una excepción y no se registra.
+
+| Oráculo | Casos | Qué comprueba | Módulo |
+|---|---|---|---|
+| `juice-shop-functional` | 3 Juice Shop | Los tests *funcionales* de la API de la ruta siguen pasando | `oracle_juiceshop.py` |
+| `juice-shop-exploit` | 3 Juice Shop | Los tests *de ataque* de la ruta dejan de pasar (seguridad dinámica) | `oracle_juiceshop.py` |
+| `secbench-exploit` | 30 SecBench | El exploit oficial de SecBench.js deja de funcionar contra el paquete parcheado | `oracle_secbench.py` |
+| `secbench-t1-suite` | 17 SecBench | La suite de tests del propio paquete sigue pasando | `oracle_secbench.py` |
+| T2 diferencial | 13 SecBench | Mismas salidas que la versión original con entradas benignas | pendiente (4.8b) |
+
+### Preregistro
+
+Fijado antes de que exista ningún parche de la Fase 5 y versionado en
+`benchmarks/oracles/`:
+
+- **`juice-shop-api.json`**: los 41 tests de las tres rutas, clasificados como
+  `functional` (26) o `vuln` (15), con la justificación de los casos dudosos (p. ej.
+  los cuatro tests "SQL Injection fails…" afirman un error SQLITE, es decir, que la
+  entrada llega al parser: son de vulnerabilidad). Los 41 pasan sobre la base.
+- **`secbench-functional.json`**: para cada caso, el nivel (T1/T2), de dónde salen
+  los tests (tarball o repositorio en el commit de la etiqueta de la versión), el
+  comando curado y su validación. Lo genera y valida
+  `scripts/benchmarks/secbench_oracle_register.py`.
+
+### Juice Shop
+
+Los tests de API se ejecutan dentro del worktree parcheado con el runner nativo de
+Node (reporter JUnit, porque nombra cada test). El worktree no tiene
+`node_modules` ni artefactos de build, así que se **enlazan** (junctions de
+Windows) los de tu checkout: `node_modules`, `build` y `frontend/dist`. Los dos
+últimos solo satisfacen las precondiciones de arranque de Juice Shop (que los
+ficheros existan): los tests importan `server.ts` y ejecutan las rutas TypeScript
+del worktree con tsx, es decir, el código parcheado.
+
+**Seguridad de los enlaces.** `git worktree remove --force` borra el contenido no
+versionado; si entrara en un enlace, vaciaría tus carpetas reales. Por eso los
+enlaces se quitan siempre al acabar el oráculo y, además, `worktree.remove` los
+quita antes de llamar a git (por si el proceso muere a mitad). Comprobado:
+borrando el worktree con los enlaces todavía dentro, `node_modules` (848
+entradas), `build` (448) y `frontend/dist` (764) quedan intactos.
+
+Dos detalles encontrados al validarlo: el reporter JUnit de Node escapa dos veces
+las comillas de los nombres (`&amp;quot;`), y un test preregistrado que no
+aparece en el informe se trata como error del oráculo, no como fallo del parche.
+
+### SecBench.js: exploit
+
+`run_case.sh` acepta `PATCHED_SRC`: instala la versión vulnerable publicada y
+sobrescribe `node_modules/<paquete>` con el `src/` parcheado del worktree.
+`src/` es exactamente el tarball de npm de esa versión (`npm pack`), así que lo
+único que cambia es el parche. Validación: sobre la base el exploit funciona; con
+el código de la versión corregida oficial (`fixed/`) deja de funcionar
+(`set-value`, `dns-sync`).
+
+**Limitación:** el oráculo prueba **el** exploit oficial, no cualquier ataque. El
+arreglo oficial de `dns-sync` es incompleto (etiquetado UNCERTAIN en el triaje,
+D3) y aun así supera este exploit.
+
+### SecBench.js: T1 (suite del propio paquete)
+
+`run_suite.sh` ejecuta la suite sobre el `src/` montado (base o parcheado) en el
+harness de Node 16. Si el tarball no trae los tests, se toman del repositorio
+original en el commit de la etiqueta de la versión (caché fuera del repo, sin
+`.git`). Las dependencias se guardan en un volumen de Docker por caso, de modo que
+cada ejecución tarda 2–17 s.
+
+**Criterios de un comando T1.** Se excluyen los linters (`xo`, `standard`,
+`eslint`, `jshint`) y los umbrales de cobertura (`--100`, `-t 100`), porque no
+son regresiones funcionales. También se excluyen los tests que ya fallan sobre la
+base (2 de *tree-shaking* en underscore, 1 de hoek, 2 ficheros de tough-cookie).
+
+**Falsos "pasa" detectados por el sondeo:** `madlib-object-utils` sale con 0 si
+falta grunt; el mocha 1.x de `dns-sync`, `forwarded` y `fresh` sale con 0 en
+Node 16 sin ejecutar nada (se fija mocha 5.2); `hosted-git-info` sale con 0 sin
+tests en el tarball; `tough-cookie` igual.
+
+**Control de sensibilidad.** Que la suite pase sobre la base no basta: tiene que
+llegar al código vulnerable. El registro ejecuta además la suite sobre un
+**mutante** con `throw` insertado justo antes de la línea del sink, y exige que
+falle. Si el `throw` rompe la sintaxis (sink dentro de una expresión multilínea),
+se inserta al inicio del fichero y la sensibilidad queda como `module-load`, más
+débil (jsonpointer, libnested, forwarded).
+
+| Resultado | Casos |
+|---|---|
+| **T1 válido (17)** | underscore (203 tests), bestzip (77), connection-tester, dns-sync, dset (12), hoek (194), json-ptr (195), jsonpointer, libnested (30), madlib-object-utils (8), set-value (26), color-string, forwarded (4), fresh (22), hosted-git-info (3.246), is-email, tough-cookie |
+| **Rechazado por sensibilidad → T2 (5)** | apex-publish-static-files, diskusage-ng, macaddress, whereis, m-server: pasan sobre la base pero siguen pasando con el `throw` en el sink |
+| **Sin suite utilizable → T2 (8)** | pixl-class, portprocesses, serve-here.js (sin tests); giting, tinyserver2 (repositorio inaccesible); async-git (sin etiqueta de la versión); react-dev-utils, thi.ng-egf (monorepos) |
+
+D9 estimaba "hasta 25" casos T1; tras exigir que la suite llegue al sink quedan
+17. Riesgo declarado: los tests de `connection-tester` y `dns-sync` usan la red
+(TCP a hosts públicos, DNS); un fallo ahí debe contrastarse con la conectividad.
+
+**El ejemplo de D9, medido.** Un parche saboteador para `set-value` (`return
+target;` como primera línea de `set()`) **engaña al exploit** ("the exploit no
+longer succeeds") y **T1 lo detecta** (23 de 26 tests fallan). Sin oráculo
+funcional, contaría como arreglo.
+
+**Prueba de punta a punta con oráculos** (CodeQL, worktrees y LLM con guion, SQLi
+de `login.ts`): el parche cosmético se rechaza por CodeQL (reubicado) **y** por el
+oráculo dinámico (5/5 ataques siguen funcionando); el arreglo del PR #7 da FIXED,
+13/13 funcionales y 0/5 ataques → ACCEPTED en el intento 2.
+
+```bash
+python scripts/ai_agent/oracle_juiceshop.py --tree . --target src/app/juice-shop/routes/login.ts
+python scripts/ai_agent/oracle_secbench.py exploit --tree . --case prototype-pollution/set-value_3.0.0
+python scripts/ai_agent/oracle_secbench.py suite --case prototype-pollution/set-value_3.0.0
+python scripts/benchmarks/secbench_oracle_register.py [caso ...]   # revalidar el preregistro T1
+```
+
 ## Uso de `regression.py`
 
 ```bash
@@ -455,6 +573,8 @@ python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif 
 - **`repair_loop.py`** — bucle reflexivo (Paso 4.7): parche → verificación →
   feedback → nuevo parche, hasta 3 intentos; ACCEPTED o ESCALATED. Ver "Bucle
   reflexivo" arriba.
+- **`oracle_juiceshop.py`**, **`oracle_secbench.py`** — oráculos de D9 (Paso 4.8)
+  sobre el worktree parcheado. Ver "Oráculos de verificación de D9" arriba.
 - **`rescan.py`** — rescan local post-parche con CodeQL CLI (Paso 4.2), con la
   misma versión y suite que CI y el SARIF con forma de artefacto unificado. Ver
   "Rescan local con CodeQL" arriba.

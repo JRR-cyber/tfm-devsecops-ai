@@ -1,0 +1,392 @@
+{
+ "_doc": "Pre-registered functional oracle for the 30 SecBench.js remediation cases (decision D9, docs/benchmark/decisions.md). Fixed before any Phase 5 patch exists. T1 = the package's own test suite, run in the Node 16 harness (benchmarks/secbench-js/harness, run_suite) on the case's src/ (the npm tarball of the version; for a patch, the worktree's patched src/). Tests come from the tarball or, when it ships none, from the upstream repository at the version's tag commit. Commands are curated: linters, coverage gates and tests that already fail on the unpatched base are left out. Every T1 spec is validated by scripts/benchmarks/secbench_oracle_register.py: it must pass on the base and must FAIL on a mutant with a throw inserted before the sink line (sensitivity control: the suite reaches the vulnerable code). Specs that fail validation are demoted to T2 (differential testing with pre-registered benign inputs).",
+ "registered": "2026-11-16",
+ "harness": "tfm/secbench-harness (node:16-bookworm)",
+ "cases": {
+  "code-injection/pixl-class_1.0.0": {
+   "tier": "T2",
+   "reason": "no test suite: no test script and no tests in the tarball or the repository"
+  },
+  "code-injection/underscore_1.13.0-0": {
+   "tier": "T1",
+   "tests": {
+    "repo": "https://github.com/jashkenas/underscore",
+    "commit": "645f8fa1d5d33711e2899b966ecc5c759aab87df",
+    "paths": [
+     "test",
+     "rollup.config.js",
+     "test-treeshake"
+    ]
+   },
+   "command": "./node_modules/.bin/rollup --config >/dev/null 2>&1 && ./node_modules/.bin/qunit --filter '!Tree-shaking' test/",
+   "notes": "QUnit suite run on the bundle rebuilt from modules/ (rollup), so it sees a patch to modules/template.js. The 2 tree-shaking tests need a separate build step and fail on the base: excluded.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 12.4,
+    "sensitivity": "sink-line",
+    "mutant_exit": 1
+   }
+  },
+  "command-injection/apex-publish-static-files_2.0.0": {
+   "tier": "T2",
+   "reason": "T1 rejected: suite still passes with a throw before the sink line: it never reaches the vulnerable code",
+   "t1_candidate": {
+    "tests": "tarball",
+    "command": "./node_modules/.bin/ava --verbose",
+    "validation": {
+     "base_exit": 0,
+     "base_seconds": 4.5,
+     "sensitivity": "sink-line",
+     "mutant_exit": 0,
+     "rejected": "suite still passes with a throw before the sink line: it never reaches the vulnerable code"
+    }
+   },
+   "notes": "npm test is 'xo && ava': the xo linter is left out."
+  },
+  "command-injection/async-git_1.13.1": {
+   "tier": "T2",
+   "reason": "tests not in the tarball and the repository has no tag for 1.13.1"
+  },
+  "command-injection/bestzip_2.1.6": {
+   "tier": "T1",
+   "tests": {
+    "repo": "https://github.com/nfriedly/node-bestzip",
+    "commit": "d195517586d3e2ac744adca93b015cb570929f1a",
+    "paths": [
+     "test"
+    ]
+   },
+   "command": "./node_modules/.bin/jest test",
+   "notes": "npm test runs eslint first: left out.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 17.1,
+    "sensitivity": "sink-line",
+    "mutant_exit": 1
+   }
+  },
+  "command-injection/connection-tester_0.2.0": {
+   "tier": "T1",
+   "tests": {
+    "repo": "https://github.com/skoranga/node-connection-tester",
+    "commit": "7d7b7112d4bfe5a711b292fa046edd57e9da9266",
+    "paths": [
+     "test"
+    ]
+   },
+   "command": "NODE_ENV=test ./node_modules/.bin/mocha",
+   "notes": "Some tests open TCP connections to public hosts (www.yahoo.com, www.example.com): network-dependent, a failure must be checked against connectivity.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 4.6,
+    "sensitivity": "sink-line",
+    "mutant_exit": 5
+   }
+  },
+  "command-injection/diskusage-ng_0.2.6": {
+   "tier": "T2",
+   "reason": "T1 rejected: suite still passes with a throw before the sink line: it never reaches the vulnerable code",
+   "t1_candidate": {
+    "tests": "tarball",
+    "command": "./node_modules/.bin/tape 'tests/**/test-*.js'",
+    "validation": {
+     "base_exit": 0,
+     "base_seconds": 2.1,
+     "sensitivity": "sink-line",
+     "mutant_exit": 0,
+     "rejected": "suite still passes with a throw before the sink line: it never reaches the vulnerable code"
+    }
+   }
+  },
+  "command-injection/dns-sync_0.1.0": {
+   "tier": "T1",
+   "tests": "tarball",
+   "command": "NODE_ENV=test ./node_modules/.bin/mocha --reporter spec",
+   "extra_dev": "mocha@5.2.0",
+   "notes": "The declared mocha 1.x exits 0 on Node 16 without running anything: mocha 5.2.0 is pinned. Tests resolve DNS names (network-dependent). The jshint step of 'make test' is left out.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 2.7,
+    "sensitivity": "sink-line",
+    "mutant_exit": 2
+   }
+  },
+  "command-injection/giting_0.0.7": {
+   "tier": "T2",
+   "reason": "no test suite and the repository is no longer available"
+  },
+  "command-injection/macaddress_0.2.8": {
+   "tier": "T2",
+   "reason": "T1 rejected: suite still passes with a throw before the sink line: it never reaches the vulnerable code",
+   "t1_candidate": {
+    "tests": "tarball",
+    "command": "node test.js",
+    "validation": {
+     "base_exit": 0,
+     "base_seconds": 1.5,
+     "sensitivity": "sink-line",
+     "mutant_exit": 0,
+     "rejected": "suite still passes with a throw before the sink line: it never reaches the vulnerable code"
+    }
+   },
+   "notes": "Smoke-level script: it throws if no valid MAC address is returned."
+  },
+  "command-injection/portprocesses_1.0.4": {
+   "tier": "T2",
+   "reason": "no test suite (test script is the npm placeholder)"
+  },
+  "command-injection/react-dev-utils_11.0.0": {
+   "tier": "T2",
+   "reason": "tests live in the create-react-app monorepo and need its workspace build; out of scope for a per-package harness"
+  },
+  "command-injection/thi.ng-egf_0.3.0": {
+   "tier": "T2",
+   "reason": "tests live in the thi.ng/umbrella monorepo (TypeScript sources and workspace build); the tarball ships only compiled output"
+  },
+  "command-injection/whereis_0.4.0": {
+   "tier": "T2",
+   "reason": "T1 rejected: suite still passes with a throw before the sink line: it never reaches the vulnerable code",
+   "t1_candidate": {
+    "tests": "tarball",
+    "command": "node test.js",
+    "validation": {
+     "base_exit": 0,
+     "base_seconds": 1.9,
+     "sensitivity": "sink-line",
+     "mutant_exit": 0,
+     "rejected": "suite still passes with a throw before the sink line: it never reaches the vulnerable code"
+    }
+   }
+  },
+  "path-traversal/m-server_1.4.0": {
+   "tier": "T2",
+   "reason": "T1 rejected: suite still passes with a throw before the sink line: it never reaches the vulnerable code",
+   "t1_candidate": {
+    "tests": "tarball",
+    "command": "./node_modules/.bin/mocha --exit test/test.js",
+    "extra_dev": "mocha@5.2.0",
+    "validation": {
+     "base_exit": 0,
+     "base_seconds": 2.1,
+     "sensitivity": "sink-line",
+     "mutant_exit": 0,
+     "rejected": "suite still passes with a throw before the sink line: it never reaches the vulnerable code"
+    }
+   },
+   "notes": "mocha is not declared as a devDependency: mocha 5.2.0 is pinned."
+  },
+  "path-traversal/serve-here.js_1.1.0": {
+   "tier": "T2",
+   "reason": "no test suite: test/ is a static demo site, test script is the npm placeholder"
+  },
+  "path-traversal/tinyserver2_0.5.2": {
+   "tier": "T2",
+   "reason": "no test suite and the repository is unreachable"
+  },
+  "prototype-pollution/dset_1.0.0": {
+   "tier": "T1",
+   "tests": {
+    "repo": "https://github.com/lukeed/dset",
+    "commit": "ad8efb35e48b1b8eb09f4eaa7ac62246b781a2cc",
+    "paths": [
+     "test"
+    ]
+   },
+   "command": "echo \"module.exports = require('./dset.js');\" > dist/deepset.js && ./node_modules/.bin/tape test/*.js",
+   "notes": "The tagged test requires dist/deepset, published as dist/dset.js (the sink file): a one-line alias module points to it.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 2.0,
+    "sensitivity": "sink-line",
+    "mutant_exit": 1
+   }
+  },
+  "prototype-pollution/hoek_5.0.0": {
+   "tier": "T1",
+   "tests": {
+    "repo": "https://github.com/hapijs/hoek",
+    "commit": "5f7e4dea1fec7cb58bf3eaa73ff4fc04bdb8e62d",
+    "paths": [
+     "test"
+    ]
+   },
+   "command": "./node_modules/.bin/lab -a code -l -i 1-192,194-195",
+   "notes": "-l: lab 14 reports Node 16's new globals as leaks. Test 193 (stringify error message) fails on the base because Node 16 changed the message: excluded by id. Coverage gate (-t 100) and lint (-L) left out.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 2.3,
+    "sensitivity": "sink-line",
+    "mutant_exit": 1
+   }
+  },
+  "prototype-pollution/json-ptr_1.1.0": {
+   "tier": "T1",
+   "tests": "tarball",
+   "command": "./node_modules/.bin/mocha 'test/**/*.js'",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 2.5,
+    "sensitivity": "sink-line",
+    "mutant_exit": 1
+   }
+  },
+  "prototype-pollution/jsonpointer_4.0.0": {
+   "tier": "T1",
+   "tests": "tarball",
+   "command": "node test.js",
+   "notes": "npm test runs the standard linter first: left out.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 2.1,
+    "sensitivity": "module-load",
+    "mutant_exit": 1
+   }
+  },
+  "prototype-pollution/libnested_1.5.0": {
+   "tier": "T1",
+   "tests": "tarball",
+   "command": "node test.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 1.7,
+    "sensitivity": "module-load",
+    "mutant_exit": 1
+   }
+  },
+  "prototype-pollution/madlib-object-utils_0.1.6": {
+   "tier": "T1",
+   "tests": "tarball",
+   "command": "./node_modules/.bin/mocha --compilers coffee:coffee-script/register test/*.coffee",
+   "extra_dev": "mocha@2.5.3",
+   "notes": "npm test needs a global grunt and exits 0 without it (a false pass): the CoffeeScript mocha tests are run directly.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 2.1,
+    "sensitivity": "sink-line",
+    "mutant_exit": 4
+   }
+  },
+  "prototype-pollution/set-value_3.0.0": {
+   "tier": "T1",
+   "tests": {
+    "repo": "https://github.com/jonschlinkert/set-value",
+    "commit": "1ac51c3662ce0a2016cb29a492f9e0b243fc4522",
+    "paths": [
+     "test.js"
+    ]
+   },
+   "command": "./node_modules/.bin/mocha test.js",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 2.2,
+    "sensitivity": "sink-line",
+    "mutant_exit": 20
+   }
+  },
+  "redos/color-string_1.5.4": {
+   "tier": "T1",
+   "tests": {
+    "repo": "https://github.com/Qix-/color-string",
+    "commit": "60f3f66477a298589288e3df6e895f88e6cd8e8e",
+    "paths": [
+     "test"
+    ]
+   },
+   "command": "node test/basic.js",
+   "notes": "assert-based script: silent on success.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 2.1,
+    "sensitivity": "sink-line",
+    "mutant_exit": 1
+   }
+  },
+  "redos/forwarded_0.1.0": {
+   "tier": "T1",
+   "tests": {
+    "repo": "https://github.com/jshttp/forwarded",
+    "commit": "e9a9faeb3cfaadf40eb57d144fff26bca9b818e8",
+    "paths": [
+     "test"
+    ]
+   },
+   "command": "./node_modules/.bin/mocha --reporter spec --check-leaks test/",
+   "extra_dev": "mocha@5.2.0",
+   "notes": "The declared mocha 1.x exits 0 on Node 16 without running anything: mocha 5.2.0 is pinned.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 2.0,
+    "sensitivity": "module-load",
+    "mutant_exit": 1
+   }
+  },
+  "redos/fresh_0.5.0": {
+   "tier": "T1",
+   "tests": {
+    "repo": "https://github.com/jshttp/fresh",
+    "commit": "b1d26abb390d5dd1d9b82f0a5b890ab0ef1fee5c",
+    "paths": [
+     "test"
+    ]
+   },
+   "command": "./node_modules/.bin/mocha --reporter spec --check-leaks test/",
+   "extra_dev": "mocha@5.2.0",
+   "notes": "The declared mocha 1.x exits 0 on Node 16 without running anything: mocha 5.2.0 is pinned.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 2.2,
+    "sensitivity": "sink-line",
+    "mutant_exit": 12
+   }
+  },
+  "redos/hosted-git-info_3.0.0": {
+   "tier": "T1",
+   "tests": {
+    "repo": "https://github.com/npm/hosted-git-info",
+    "commit": "64f0b645f52371b0680becafe7b200da8d3330ec",
+    "paths": [
+     "test"
+    ]
+   },
+   "command": "./node_modules/.bin/tap --no-coverage -R classic test/*.js",
+   "notes": "The --100 coverage gate is left out (a fix adding an uncovered branch is not a functional regression).",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 5.6,
+    "sensitivity": "sink-line",
+    "mutant_exit": 1
+   }
+  },
+  "redos/is-email_1.0.0": {
+   "tier": "T1",
+   "tests": "tarball",
+   "command": "./node_modules/.bin/mocha test/index.test.js",
+   "notes": "npm test runs the suite in a browser through Karma/PhantomJS: run under Node with mocha instead.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 2.8,
+    "sensitivity": "sink-line",
+    "mutant_exit": 2
+   }
+  },
+  "redos/tough-cookie_2.3.2": {
+   "tier": "T1",
+   "tests": {
+    "repo": "https://github.com/salesforce/tough-cookie",
+    "commit": "2610df5dc8ef7373a483d509006e5887572a4076",
+    "paths": [
+     "test"
+    ]
+   },
+   "command": "./node_modules/.bin/vows test/api_test.js test/cookie_jar_test.js test/cookie_sorting_test.js test/cookie_to_json_test.js test/cookie_to_string_test.js test/date_test.js test/domain_and_path_test.js test/lifetime_test.js test/parsing_test.js test/regression_test.js",
+   "notes": "ietf_test.js and jar_serialization_test.js fail on the base under Node 16 (assert API changes): excluded.",
+   "validation": {
+    "base_exit": 0,
+    "base_seconds": 6.7,
+    "sensitivity": "sink-line",
+    "mutant_exit": 1
+   }
+  }
+ },
+ "validated": "2026-11-16"
+}
