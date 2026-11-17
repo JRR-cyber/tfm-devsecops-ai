@@ -71,7 +71,7 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 | 4.6 | Decisión del oráculo funcional (`dataset.md` §7) | **hecho** — [D9](../../docs/benchmark/decisions.md): seguridad doble (CodeQL + exploit sobre el parche) y funcional por niveles (tests de API en Juice Shop, suite del paquete T1, diferencial T2) |
 | 4.7 | Bucle reflexivo: hasta 3 intentos, con el motivo del rechazo como feedback | **hecho** — `repair_loop.py` |
 | 4.8 | Implementación de los oráculos de D9 (preregistro + ejecutores) | **hecho** — `oracle_juiceshop.py`, `oracle_secbench.py`: Juice Shop (3), exploit SecBench (30), T1 (17), T2 (13) |
-| 4.9 | Etiquetado y escalado de PRs | pendiente |
+| 4.9 | Etiquetado y escalado de PRs | **hecho** — `publish.py`; `triage_engine.py` encadena triaje → bucle → publicación |
 | 4.10 | Ensayo de punta a punta sobre los 33 casos | pendiente |
 
 ## Aislamiento con worktrees (4.1)
@@ -567,6 +567,52 @@ python scripts/ai_agent/oracle_secbench.py diff --case command-injection/async-g
 python scripts/benchmarks/secbench_oracle_register.py [caso ...]   # revalidar el preregistro (T1 y T2)
 ```
 
+## Etiquetado y escalado (4.9)
+
+`publish.py` convierte el resultado del bucle en lo que recibe la persona que
+revisa. **Solo se abre un PR para un parche verificado**, el intento que el bucle
+aceptó. Un caso escalado no tiene parche verificado, así que no se sube código: se
+abre un *issue* con cada intento, su diff y el motivo del rechazo.
+
+| Resultado del bucle | Se publica como | Etiquetas |
+|---|---|---|
+| ACCEPTED con evidencia completa | PR | `ai-fixed` |
+| ACCEPTED con salvedades | PR, con sección "Por qué revisar con especial atención" | `ai-fixed` + `ai-needs-review` |
+| ESCALATED tras 3 intentos | issue | `ai-escalated` |
+
+Todo PR sigue necesitando aprobación humana (postura asistiva): las etiquetas solo
+dicen cuánto cubre ya la verificación automática.
+
+**Salvedades** (reglas fijas; cada una añade `ai-needs-review` y se explica en el
+PR):
+
+- Ningún oráculo funcional o de exploit cubre el hallazgo. Es el caso de los
+  candidatos fuera de los 33 del dataset, que solo verifica CodeQL.
+- El oráculo funcional es el más débil: diferencial (T2), o una suite T1 con
+  sensibilidad `module-load`.
+- El parche también cambió otros hallazgos (DISAPPEARED, o RELOCATED aparte del
+  objetivo): efectos más allá del arreglo.
+
+El PR incluye la tabla de verificación (CodeQL y cada oráculo con su resultado),
+los intentos anteriores si los hubo (con el motivo de cada rechazo) y el parche.
+
+`triage_engine.py` encadena ya todo: triaje → (si TP) bucle reflexivo con CodeQL y
+oráculos → publicación. Por defecto es dry-run (muestra el PR o el issue que
+crearía); `--commit` crea la rama local; `--open` publica (push + PR, o issue). El
+triaje también se guarda en el registro, y al relanzar no se vuelve a pagar.
+
+Validación offline (12 comprobaciones): evidencia completa → solo `ai-fixed`;
+historial de intentos en el PR; candidato sin oráculos → `ai-needs-review` con 2
+salvedades; T2 y T1 `module-load` → salvedad; T1 con sensibilidad en la línea
+del sink → sin salvedad; efectos colaterales; escalado → issue sin diff; dry-run
+del PR con el parche real del PR #7 (se aplica y muestra las etiquetas).
+
+```bash
+python scripts/ai_agent/publish.py labels [--apply]      # crea/actualiza las 3 etiquetas en GitHub
+python scripts/ai_agent/triage_engine.py unified/findings.sarif --repo-root . \
+    --fingerprint <fp> --run [--strategy cot] [--commit] [--open]
+```
+
 ## Uso de `regression.py`
 
 ```bash
@@ -625,6 +671,8 @@ python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif 
   reflexivo" arriba.
 - **`oracle_juiceshop.py`**, **`oracle_secbench.py`** — oráculos de D9 (Paso 4.8)
   sobre el worktree parcheado. Ver "Oráculos de verificación de D9" arriba.
+- **`publish.py`** — etiquetado y escalado (Paso 4.9): PR `ai-fixed` [+
+  `ai-needs-review`] o issue `ai-escalated`. Ver "Etiquetado y escalado" arriba.
 - **`rescan.py`** — rescan local post-parche con CodeQL CLI (Paso 4.2), con la
   misma versión y suite que CI y el SARIF con forma de artefacto unificado. Ver
   "Rescan local con CodeQL" arriba.
@@ -634,8 +682,9 @@ python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif 
   python scripts/ai_agent/worktree.py list
   python scripts/ai_agent/worktree.py remove fix/ai-remediation-<regla>-<fp8> [--delete-branch]
   ```
-- **`triage_engine.py`** — orquestador (capstone de la Fase 3): encadena
-  parse → filtro (CVSS≥7 ∩ traza) → triaje → (si TP) parche → PR. Sin argumentos
+- **`triage_engine.py`** — orquestador: encadena parse → filtro (CVSS≥7 ∩ traza)
+  → triaje → (si TP) bucle reflexivo con verificación (4.7–4.8) → PR o issue
+  (4.9). Sin argumentos
   lista los candidatos; con `--fingerprint … --run` ejecuta un hallazgo de punta a
   punta.
   ```bash

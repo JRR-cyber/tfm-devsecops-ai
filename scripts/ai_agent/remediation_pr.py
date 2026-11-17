@@ -132,7 +132,9 @@ def _git(args: list[str], repo_root: Path) -> subprocess.CompletedProcess:
 
 
 def prepare_pr(finding: Finding, diff: str, repo_root: Path, verdict: str | None = None,
-               commit: bool = False, open_pr: bool = False, base: str = "main") -> str:
+               commit: bool = False, open_pr: bool = False, base: str = "main",
+               body: str | None = None, labels: list[str] | None = None,
+               title: str | None = None) -> str:
     """Apply the patch and (optionally) create the branch/commit/PR.
 
     Default (commit=False): dry-run — apply in memory and return a report without
@@ -141,13 +143,21 @@ def prepare_pr(finding: Finding, diff: str, repo_root: Path, verdict: str | None
     so a PR against ``base`` contains only the fix and the user's checkout is never
     touched; open_pr=True also pushes and opens the PR with gh (outward-facing).
     The worktree directory is always removed; the branch is kept only on success.
+
+    ``body``/``labels``/``title`` (4.9, ``publish.decide``) override the default PR
+    text and add ``--label`` flags.
     """
     branch = branch_name(finding)
+    body = body or pr_body(finding, diff, verdict)
+    title = title or f"fix(ai): {finding.rule_id}"
+    label_args = [x for l in labels or [] for x in ("--label", l)]
     if not commit:
         result = apply_by_content(diff, repo_root)
         report = [f"branch: {branch} (from {base})", result.detail]
         if not result.ok:
             return "\n".join(["APPLY FAILED", *report])
+        if labels:
+            report.append(f"labels: {', '.join(labels)}  |  title: {title}")
         preview = next(iter(result.changed.values()))
         report.append("\n--- dry-run: resulting file (first 40 lines) ---")
         report += preview.splitlines()[:40]
@@ -181,8 +191,8 @@ def prepare_pr(finding: Finding, diff: str, repo_root: Path, verdict: str | None
             _git(["push", "-u", "origin", branch], repo_root)
             pr = subprocess.run(
                 ["gh", "pr", "create", "--base", base, "--head", branch,
-                 "--title", f"fix(ai): {finding.rule_id}", "--body", pr_body(finding, diff, verdict)],
-                cwd=repo_root, text=True, capture_output=True)
+                 "--title", title, "--body-file", "-", *label_args],
+                cwd=repo_root, input=body, text=True, capture_output=True)
             report.append(pr.stdout.strip() or pr.stderr.strip())
         else:
             report.append(f"(local only; open with: gh pr create --base {base} --head {branch})")
