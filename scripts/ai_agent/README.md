@@ -43,7 +43,22 @@ los tokens de razonamiento triplicaran la salida. El ensayo del 4.10 medirá el
 coste real por llamada antes de la Fase 5. A 16-11-2026 la contratación está
 **pendiente**: Groq tiene las altas al plan Developer "temporalmente no
 disponibles por alta demanda". Los pasos 4.7–4.9 no la necesitan (se prueban con un
-LLM simulado y pocas llamadas reales); hay que resolverla antes del 4.10.
+LLM simulado y pocas llamadas reales).
+
+**Plan gratuito por tandas (17-11-2026).** Con el plan Developer aún bloqueado, el
+4.10 se ejecuta en el plan gratuito, que para `gpt-oss-120b` permite 30
+peticiones/min, 1.000 peticiones/día, 8K tokens/min y 200K tokens/día. La demo
+real midió ~5.900 tokens por caso completo (triaje + 2 intentos), así que los 33
+casos caben en 1–2 días de cuota. El límite por minuto no estorba, porque cada
+intento ya espera ~95 s al rescan de CodeQL. Cuando se agota la cuota diaria, el
+cliente lanza `GroqQuotaExhausted` sin reintentar, con el tiempo de espera que
+indica Groq (cabecera `Retry-After` o "try again in …" del mensaje). El lote se
+detiene y se relanza después con el mismo comando: el log (4.5) evita repetir lo
+ya hecho. Un 429 corto (por minuto) se sigue esperando dentro del cliente. No se
+cambia de proveedor: aunque otros sirven el mismo modelo, mezclar proveedores
+dentro de un experimento rompería el diseño within-subject. Si la Fase 5 no cupiera
+en el plan gratuito, el cambio se aplicaría a todo el experimento y se registraría
+como decisión nueva.
 
 ## Estado por paso
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -35,8 +36,53 @@ MAX_RETRIES = 5
 USER_AGENT = "Mozilla/5.0 (compatible; tfm-devsecops-ai/1.0)"
 
 
+# A 429 that asks to wait longer than this is a spent quota (tokens or requests
+# per day on the free plan), not a burst: waiting inside the call would block a
+# batch run for hours, so the client stops and the run is resumed later from its
+# log (results.py). Shorter 429s (per-minute limits) are waited out as before.
+QUOTA_WAIT_LIMIT = 60
+_DAILY = re.compile(r"per day|\((?:TPD|RPD)\)", re.I)
+_TRY_AGAIN = re.compile(r"try again in\s*(?:(\d+)h)?\s*(?:(\d+)m(?!s))?\s*(?:([\d.]+)s)?", re.I)
+
+
 class GroqError(RuntimeError):
     """A call to Groq failed (missing key, HTTP error, or malformed response)."""
+
+
+class GroqQuotaExhausted(GroqError):
+    """Groq's rate-limit quota is spent; retry after ``wait_seconds`` (None = unknown)."""
+
+    def __init__(self, wait_seconds: float | None, detail: str):
+        self.wait_seconds = wait_seconds
+        when = f"in ~{format_wait(wait_seconds)}" if wait_seconds else "later"
+        super().__init__(f"Groq quota exhausted: resume the run {when}. {detail}")
+
+
+def format_wait(seconds: float) -> str:
+    """Human-readable wait: '45 s', '12 min', '2 h 05 min'."""
+    seconds = int(round(seconds))
+    if seconds < 60:
+        return f"{seconds} s"
+    hours, minutes = divmod(-(-seconds // 60), 60)
+    return f"{hours} h {minutes:02d} min" if hours else f"{minutes} min"
+
+
+def wait_hint(headers, body: str) -> float | None:
+    """Seconds Groq asks to wait: ``Retry-After`` header, else 'try again in 1h2m3.4s'."""
+    try:
+        return float(headers.get("Retry-After"))
+    except (AttributeError, TypeError, ValueError):
+        pass
+    m = _TRY_AGAIN.search(body or "")
+    if not m or not any(m.groups()):
+        return None
+    h, mins, s = m.groups()
+    return int(h or 0) * 3600 + int(mins or 0) * 60 + float(s or 0)
+
+
+def is_quota(wait: float | None, body: str) -> bool:
+    """A 429 that will not clear within a short back-off."""
+    return bool(_DAILY.search(body or "")) or (wait is not None and wait > QUOTA_WAIT_LIMIT)
 
 
 @dataclass
@@ -90,8 +136,10 @@ class GroqClient:
                  max_tokens: int | None = None) -> Completion:
         """Send a system+user prompt and return the reply.
 
-        Retries transient failures (429 and 5xx) with exponential backoff; raises
-        GroqError on a non-transient error or after the retries are exhausted.
+        Retries transient failures (short 429 and 5xx) with back-off; raises
+        GroqQuotaExhausted at once when the quota is spent (a daily limit, or a
+        wait over QUOTA_WAIT_LIMIT), and GroqError on any other non-transient
+        error or after the retries are exhausted.
         """
         payload = {
             "model": self.model,
@@ -122,17 +170,15 @@ class GroqClient:
                 return self._parse(data)
             except urllib.error.HTTPError as err:
                 last_error = err
-                if err.code in (429, 500, 502, 503, 504) and attempt < MAX_RETRIES - 1:
-                    # On 429 Groq sends Retry-After (seconds); honour it instead of
-                    # a short fixed backoff, so batch runs self-pace to the limit.
-                    retry_after = err.headers.get("Retry-After") if err.headers else None
-                    try:
-                        delay = float(retry_after)
-                    except (TypeError, ValueError):
-                        delay = 2 ** attempt
-                    time.sleep(min(delay, 30))
-                    continue
                 detail = err.read().decode("utf-8", "replace")[:500]
+                wait = wait_hint(err.headers, detail) if err.code == 429 else None
+                if err.code == 429 and is_quota(wait, detail):
+                    raise GroqQuotaExhausted(wait, detail) from err
+                if err.code in (429, 500, 502, 503, 504) and attempt < MAX_RETRIES - 1:
+                    # A short 429 (per-minute limit) says how long to wait; honour
+                    # it instead of a fixed back-off, so batch runs self-pace.
+                    time.sleep(min(wait if wait is not None else 2 ** attempt, 30))
+                    continue
                 raise GroqError(f"Groq HTTP {err.code}: {detail}") from err
             except (urllib.error.URLError, TimeoutError) as err:
                 last_error = err
