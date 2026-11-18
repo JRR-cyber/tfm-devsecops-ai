@@ -39,6 +39,22 @@ def candidates(findings: list) -> list:
     return [f for f in findings if score(f).auto_remediable and f.has_trace]
 
 
+def triage_logged(target, client, reader, log, strategy: str = ZERO_SHOT,
+                  with_trace: bool = True, with_rag: bool = True) -> tuple[dict, bool]:
+    """Triage one finding, or take the verdict from the log (resume: no second call).
+
+    Returns (the logged record, whether it came from the log).
+    """
+    from results import TRIAGE, RunKey, triage_outcome
+    from triage import decide
+
+    key = RunKey(TRIAGE, target.label_key, strategy, with_trace, with_rag)
+    if log.done(key):
+        return log.get(key), True
+    v = decide(target, client, reader, with_trace=with_trace, with_rag=with_rag, strategy=strategy)
+    return log.append(key, triage_outcome(target, v)), False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("sarif", type=Path)
@@ -76,8 +92,7 @@ def main() -> None:
     from publish import decide as decide_publication, publish
     from repair_loop import oracle_checks, repair
     from rescan import codeql_version, find_codeql
-    from results import TRIAGE, ResultLog, RunKey, environment, triage_outcome
-    from triage import decide
+    from results import ResultLog, environment
 
     repo_root = args.repo_root.resolve()
     client = GroqClient()
@@ -85,15 +100,12 @@ def main() -> None:
     cli = find_codeql(args.codeql)
     log = ResultLog(args.log, environment(repo_root, codeql_version(cli)))
 
-    key = RunKey(TRIAGE, target.label_key, args.strategy, True, True)
-    if log.done(key):                       # resume: do not pay for the triage again
-        verdict = log.get(key)["verdict"]
+    rec, from_log = triage_logged(target, client, reader, log, args.strategy)
+    verdict = rec["verdict"]
+    if from_log:                            # resume: do not pay for the triage again
         print(f"triage (from the log): {verdict}\n")
     else:
-        v = decide(target, client, reader, with_trace=True, with_rag=True, strategy=args.strategy)
-        log.append(key, triage_outcome(target, v))
-        verdict = v.verdict
-        print(f"triage: {v.verdict} (conf={v.confidence}) — {v.rationale}\n")
+        print(f"triage: {verdict} (conf={rec['confidence']}) — {rec['rationale']}\n")
     if verdict != "TP":
         print("not a TP: the agent reports it, no patch proposed.")
         return

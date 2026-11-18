@@ -2,6 +2,23 @@
 
 Decisiones de diseño del conjunto experimental, con su motivo y su fecha. Alimenta el capítulo de gestión de proyecto de la memoria (Fase 6). La más reciente arriba.
 
+## D11 — La RSR se mide sobre los 33 casos; el umbral CVSS ≥ 7 es política del pipeline, no criterio del experimento (2026-11-18)
+
+**Contexto.** Al preparar el ensayo del 4.10 se fijó el hallazgo objetivo de cada caso ([`remediation-targets.csv`](../../benchmarks/remediation-targets.csv)). Resultado: solo **12 de los 33 casos** pasan el filtro de auto-remediación del roadmap (CVSS ≥ 7.0, paso 3.3). Pasan los 3 de Juice Shop (8.8), los 3 de path traversal y los 6 de ReDoS (7.5). Quedan por debajo las 12 inyecciones de comandos (6.3), las 7 contaminaciones de prototipo y las 2 inyecciones de código (6.1). La causa es que la única severidad que el pipeline tiene de un hallazgo SAST es el `security-severity` de CodeQL, que es **un número por regla**: todos los hallazgos de `js/shell-command-constructed-from-input` valen 6.3, sea cual sea el paquete. CodeQL no puede saber más. Ve un patrón en el código, no un CVE, y en un uso real un hallazgo en código propio no tiene CVE: el CVSS de NVD solo existe aquí porque el dataset se construyó con vulnerabilidades ya publicadas.
+
+**Comprobación con NVD** ([`nvd-cvss.csv`](../../benchmarks/nvd-cvss.csv), `scripts/benchmarks/nvd_cvss.py`, consultado el 18-11-2026). De los 30 CVE de SecBench.js, 29 tienen CVSS v3 en NVD (dns-sync, de 2014, solo v2: 10.0). **CodeQL y NVD coinciden en el lado del umbral en solo 6 de 29**, y se equivocan en las dos direcciones:
+
+| | NVD v3 ≥ 7 | NVD v3 < 7 |
+|---|---|---|
+| CodeQL ≥ 7 | 5 (tinyserver2, forwarded, fresh, is-email, tough-cookie) | 4 (m-server 6.5, serve-here.js 5.3, color-string 5.3, hosted-git-info 5.3) |
+| CodeQL < 7 | 19 (15 de ellos con 9.8–10.0) | 1 (react-dev-utils 5.6) |
+
+**Decisión.** La tasa de éxito de la remediación (RSR) y las demás métricas de remediación de la Fase 5 se miden sobre **los 33 casos**. Además se dan desglosadas por el subconjunto que pasa el filtro con la severidad de CodeQL (12) y por el que pasa con la de NVD v3 (24, todos de SecBench.js: los de Juice Shop no tienen CVE). El filtro CVSS ≥ 7 se mantiene como **política del pipeline en producción**: `triage_engine.py` solo auto-remedia los candidatos que lo cruzan y reporta el resto. El ejecutor de experimentos (`run_dataset.py`) lo ignora por defecto, y `--policy` reproduce el comportamiento de producción.
+
+**Motivo.** El umbral responde a "qué debe arreglar el agente sin que nadie se lo pida". La RSR responde a otra pregunta: si el agente sabe arreglar una vulnerabilidad confirmada cuando se le pide. Los 33 casos son vulnerabilidades reales con exploit, seleccionadas antes de cualquier parche (C1–C8). Aplicar el filtro dejaría N = 12, que es poco para Friedman/Wilcoxon, y además una selección decidida por una puntuación por regla que, según NVD, se equivoca en 23 de 29 casos. El filtro no cambia el procedimiento de reparación de cada caso, así que los 12 dan el mismo resultado en las dos lecturas.
+
+**Consecuencia.** Es una desviación de la letra del roadmap ("auto-remediación solo para CVSS ≥ 7.0") en el *experimento*, no en el pipeline. Se declara en "Amenazas a la validez". La limitación del filtro también es un resultado: un umbral sobre la severidad por regla de una herramienta SAST no prioriza bien, y priorizar por severidad real necesitaría contexto que el SAST no tiene (alcanzabilidad desde la red, impacto).
+
 ## D10 — Checkpoint de la Fase 3: alcance completo, recortando profundidad dentro de cada fase (2026-11-13)
 
 **Contexto.** El roadmap cierra la Fase 3 con un punto de decisión: seguir con el alcance completo o recortar las Fases 4–5. Al cerrarla (3.1–3.7 completos; PR demo #7, en el que CodeQL deja de detectar la SQLi de `login.ts:34`) había estas señales: gpt-oss-120b flojo descartando falsos positivos, la traza aporta sobre todo *alcanzabilidad*, el RAG es lo que mueve los FP, y los parches son de buena calidad pero sus diffs no se aplican con `git apply` (cabeceras `@@` vacías).

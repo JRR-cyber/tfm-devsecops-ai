@@ -87,7 +87,7 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 | 4.7 | Bucle reflexivo: hasta 3 intentos, con el motivo del rechazo como feedback | **hecho** — `repair_loop.py` |
 | 4.8 | Implementación de los oráculos de D9 (preregistro + ejecutores) | **hecho** — `oracle_juiceshop.py`, `oracle_secbench.py`: Juice Shop (3), exploit SecBench (30), T1 (17), T2 (13) |
 | 4.9 | Etiquetado y escalado de PRs | **hecho** — `publish.py`; `triage_engine.py` encadena triaje → bucle → publicación |
-| 4.10 | Ensayo de punta a punta sobre los 33 casos | pendiente |
+| 4.10 | Ensayo de punta a punta sobre los 33 casos | **en curso** — `run_dataset.py` y objetivos preregistrados listos; falta la ejecución real |
 
 ## Aislamiento con worktrees (4.1)
 
@@ -657,6 +657,67 @@ python scripts/ai_agent/triage_engine.py unified/findings.sarif --repo-root . \
     --fingerprint <fp> --run [--strategy cot] [--commit] [--open]
 ```
 
+## Ensayo de punta a punta (4.10)
+
+`run_dataset.py` pasa los 33 casos del dataset por el agente completo bajo una
+condición (estrategia × traza × RAG): triaje → si TP, bucle reflexivo con CodeQL y
+los oráculos de D9 → decisión de publicación. La publicación es siempre **dry-run**:
+el texto del PR o del issue va al informe y no se sube nada, porque el dataset es el
+benchmark (las demos usan `triage_engine.py --open --draft` sobre un hallazgo). El
+mismo script servirá para la rejilla de la Fase 5, condición a condición.
+
+**Objetivo preregistrado por caso.** `dataset.csv` identifica cada caso por su
+*sink* (fichero + línea), pero el bucle juzga FIXED sobre **un** fingerprint, y cerca
+del *sink* CodeQL suele dar más de un hallazgo con traza (11 de 33 casos: dos reglas
+en la misma línea o el mismo flujo marcado en varias líneas). La correspondencia
+caso → hallazgo se fija antes de cualquier parche en
+[`benchmarks/remediation-targets.csv`](../../benchmarks/remediation-targets.csv)
+(`scripts/benchmarks/remediation_targets.py`), con una regla determinista: CodeQL
+con traza en la ventana de ±10 líneas de C7, regla aceptada por C7 para el caso, el
+más cercano al *sink* y, en caso de empate, por regla y fingerprint. Regenerado con
+el SARIF de CI de `84ce0be` y el de `1e6ca25`, sale idéntico: los fingerprints no
+dependen de la línea. En SecBench, los demás hallazgos de la ventana siguen en el
+código, pero el exploit comprueba la vulnerabilidad completa.
+
+**Hallazgo: solo 12 de los 33 casos pasan el filtro CVSS ≥ 7.** CodeQL puntúa por
+*regla*, no por vulnerabilidad: `js/shell-command-*` vale 6.3 y
+`js/prototype-polluting-assignment` y `js/unsafe-code-construction` valen 6.1. Pasan
+los 3 de Juice Shop (8.8), los 3 de path traversal y los 6 de ReDoS (7.5). Las 12
+inyecciones de comandos, las 7 contaminaciones de prototipo y las 2 inyecciones de
+código quedan por debajo. Comparado con el CVSS v3 de NVD de cada CVE
+([`nvd-cvss.csv`](../../benchmarks/nvd-cvss.csv)), CodeQL y NVD solo coinciden en el
+lado del umbral en 6 de 29 casos, con errores en las dos direcciones. Decisión
+([D11](../../docs/benchmark/decisions.md)): la RSR se mide sobre los 33 y se desglosa
+por los dos subconjuntos. El umbral sigue siendo la política de producción de
+`triage_engine.py`. `run_dataset.py` repara todos los casos por defecto, y `--policy`
+aplica el filtro: los casos por debajo solo pasan por el triaje.
+
+**Por tandas en el plan gratuito.** El prompt más grande del dataset ronda los 2K
+tokens de entrada, muy por debajo del límite de 8K por minuto. Una pasada completa
+con aceptación en el intento 1 son ~100K tokens, y con reintentos se esperan
+150–250K: 1–2 días de cuota. Si se agota, el lote escribe el informe hasta donde
+llegó, dice cuándo relanzar y sale con el código 75. Al relanzar el mismo comando no
+se repite nada. Antes de gastar tokens, la comprobación previa verifica la clave,
+CodeQL, Docker, la imagen del harness, el build de Juice Shop y que los 33
+fingerprints estén en el SARIF.
+
+```bash
+# Git Bash, desde la raíz; GROQ_API_KEY y CODEQL_CLI exportadas, Docker arrancado
+gh run download <run de main> -n unified-findings -D ci
+python scripts/ai_agent/run_dataset.py ci/findings.sarif                 # todos, zero-shot, traza + RAG
+python scripts/ai_agent/run_dataset.py ci/findings.sarif --only JS-02    # un caso
+python scripts/ai_agent/run_dataset.py ci/findings.sarif --report-only   # informe desde el log
+python scripts/ai_agent/results.py summary results/dev/rehearsal-4.10.jsonl
+```
+
+El informe (`results/dev/rehearsal-4.10.md`) tiene una fila por caso con el
+triaje, el resultado (ACCEPTED / ESCALATED / NOT_TP / POLICY / PENDING), la
+secuencia de intentos con los oráculos que fallaron, las etiquetas, los tokens y los
+tiempos, además del texto que se habría publicado. Validación offline (Groq y
+verificador simulados, SARIF y log reales): 19 comprobaciones, incluidas la parada
+por cuota a mitad de lote y a mitad de bucle, la reanudación sin llamadas repetidas,
+el informe reconstruido sin llamadas y `--policy`.
+
 ## Uso de `regression.py`
 
 ```bash
@@ -734,6 +795,9 @@ python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif 
   ```bash
   python scripts/ai_agent/triage_engine.py unified/findings.sarif --repo-root .   # lista candidatos
   ```
+- **`run_dataset.py`** — el agente completo sobre los 33 casos del dataset, bajo una
+  condición, reanudable y con parada limpia por cuota; publicación en dry-run e
+  informe en markdown (4.10, reutilizable en la Fase 5).
 - **`evaluate.py`** — probe de desarrollo (NO el experimento de Fase 5): corre el
   triaje sobre el conjunto etiquetado en varios modos (`notrace` / `trace` /
   `trace+rag`) y mide el acuerdo con `labels.csv`. Para cazar bugs y ver el efecto
