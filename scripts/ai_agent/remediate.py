@@ -11,7 +11,8 @@ enclosing function from the lightweight RAG). The three prompting strategies
 as in triage, so Phase 5 compares them on remediation too.
 
 Generating the diff is this step's deliverable; applying it, rescanning and the
-reflexive repair loop belong to Phase 4.
+reflexive repair loop belong to Phase 4 (``repair_loop.py`` passes the rejected
+attempts back through ``history``).
 
 Usage (offline, print the prompt):
     python scripts/ai_agent/remediate.py <unified.sarif> --fingerprint <fp> --repo-root . [--strategy cot]
@@ -44,6 +45,17 @@ except the diff block.\
 
 USER_TEMPLATE = "Vulnerability to fix:\n\n{context}\n\nReturn the unified diff."
 
+# Reflexive loop (Paso 4.7): from the second attempt on, the rejected diffs and
+# the verifier's reasons are appended to the same user prompt. Attempt 1 gets no
+# history, so its prompt is exactly the Phase 3 one.
+RETRY_HEADER = (
+    "\n\nYour previous attempt(s) were rejected by automated verification "
+    "(the patch is applied to the ORIGINAL file shown above and the code is "
+    "rescanned with CodeQL). Every new diff is applied to the original file again, "
+    "not on top of an earlier attempt."
+)
+RETRY_FOOTER = "\n\nReturn a new unified diff that addresses this feedback."
+
 # Fixed few-shot exemplar for remediation (used only by the few-shot strategy).
 REMEDIATE_EXAMPLES: list[tuple[str, str]] = [
     (
@@ -70,12 +82,28 @@ class Patch:
     usage: Usage = field(default_factory=Usage)   # tokens/time of the call (4.5)
 
 
+def render_history(history: list[tuple[str, str]]) -> str:
+    """The rejected attempts as prompt text: each diff and why it was rejected."""
+    blocks = []
+    for i, (diff, feedback) in enumerate(history, 1):
+        shown = f"```diff\n{diff.strip()}\n```" if diff.strip() else "(no diff was returned)"
+        blocks.append(f"Attempt {i}:\n{shown}\nVerification result: {feedback}")
+    return RETRY_HEADER + "\n\n" + "\n\n".join(blocks) + RETRY_FOOTER
+
+
 def build_prompt(finding: Finding, reader: SourceReader | None = None,
                  with_trace: bool = True, with_rag: bool = True,
-                 strategy: str = ZERO_SHOT) -> tuple[str, str]:
-    """Return (system, user) for generating the patch of a finding."""
+                 strategy: str = ZERO_SHOT,
+                 history: list[tuple[str, str]] | None = None) -> tuple[str, str]:
+    """Return (system, user) for generating the patch of a finding.
+
+    ``history`` is the list of (rejected diff, feedback) of earlier attempts in
+    the reflexive loop (4.7); empty for the first attempt.
+    """
     context = render_context(finding, reader, with_trace=with_trace, with_rag=with_rag)
     system, user = SYSTEM_PROMPT, USER_TEMPLATE.format(context=context)
+    if history:
+        user += render_history(history)
     return decorate(system, user, strategy, REMEDIATE_EXAMPLES)
 
 
@@ -96,10 +124,11 @@ def parse_patch(text: str, strategy: str) -> Patch:
 
 def remediate(finding: Finding, client, reader: SourceReader | None = None,
               with_trace: bool = True, with_rag: bool = True,
-              strategy: str = ZERO_SHOT) -> Patch:
+              strategy: str = ZERO_SHOT,
+              history: list[tuple[str, str]] | None = None) -> Patch:
     """Build the prompt, ask the model, and parse the proposed diff."""
     system, user = build_prompt(finding, reader, with_trace=with_trace,
-                                with_rag=with_rag, strategy=strategy)
+                                with_rag=with_rag, strategy=strategy, history=history)
     reply, usage = timed_complete(client, system, user)
     patch = parse_patch(reply.text, strategy=strategy)
     patch.usage = usage

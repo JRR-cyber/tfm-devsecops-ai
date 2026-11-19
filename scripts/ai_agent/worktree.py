@@ -112,6 +112,30 @@ def commit_all(wt: Worktree, paths: list[str], message: str) -> str:
     return _check(_git(["rev-parse", "HEAD"], wt.path), "git rev-parse").strip()
 
 
+# Untracked directories of the user's checkout that the Juice Shop oracle (4.8)
+# links into a worktree: the dependencies, and the build artifacts that Juice
+# Shop's startup preconditions require to exist (the tests themselves run the
+# worktree's TypeScript sources through tsx, i.e. the patched code).
+ORACLE_LINKS = ("src/app/juice-shop/node_modules",
+                "src/app/juice-shop/build",
+                "src/app/juice-shop/frontend/dist")
+
+
+def _unlink_links(path: Path) -> None:
+    """Remove oracle links before deleting the worktree.
+
+    ``git worktree remove --force`` deletes untracked content; it must never get
+    the chance to recurse into a junction/symlink and empty the user's real
+    ``node_modules``. Only the link itself is removed.
+    """
+    for rel in ORACLE_LINKS:
+        link = path / rel
+        if link.is_symlink():
+            os.unlink(link)
+        elif hasattr(link, "is_junction") and link.is_junction():
+            os.rmdir(link)
+
+
 def remove(repo_root: Path, wt_or_branch: Worktree | str, delete_branch: bool = False) -> None:
     """Remove the worktree directory; optionally delete its branch too."""
     repo_root = repo_root.resolve()
@@ -120,6 +144,7 @@ def remove(repo_root: Path, wt_or_branch: Worktree | str, delete_branch: bool = 
         raise WorktreeError(f"refusing to touch {branch!r}: not a {BRANCH_PREFIX}* branch")
     path = next((p for p, b in list_worktrees(repo_root) if b == branch), None)
     if path is not None:
+        _unlink_links(path)
         _check(_git(["worktree", "remove", "--force", str(path)], repo_root), "git worktree remove")
     _git(["worktree", "prune"], repo_root)
     if delete_branch:

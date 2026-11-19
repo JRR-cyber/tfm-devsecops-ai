@@ -11,7 +11,7 @@ Fixed design decisions (roadmap v2 — don't substitute tools without being aske
 - Scanners: Semgrep OSS (SAST), Trivy (SCA + container), TruffleHog (secrets), CodeQL (dataflow/taint `codeFlows`). All output SARIF/JSON, consolidated into one unified artifact that feeds the agent.
 - LLM: Groq API, single fixed model `openai/gpt-oss-120b` (secret `GROQ_API_KEY`). The roadmap's original model, Llama 3.3 70B, was retired by Groq on 2026-08-16 (whole Llama chat family gone); Groq was kept and the model switched to its most capable open-weights general model — rationale in `scripts/ai_agent/README.md` "Decisión de modelo". Experiments compare **prompting strategies** (zero-shot / few-shot / CoT), not models.
 - Pre/post-patch findings are matched by SARIF `partialFingerprints`, **never by line number**.
-- Auto-remediation only for CVSS >= 7.0 (Semgrep severity needs a documented mapping); lower severities are only reported.
+- Auto-remediation only for CVSS >= 7.0 (Semgrep severity needs a documented mapping); lower severities are only reported. This is the pipeline's production policy; per `docs/benchmark/decisions.md` D11 the experiments measure remediation on all 33 dataset cases (CodeQL scores per rule, so only 12 cross 7.0), with the 12-case subset reported as a breakdown.
 - Reflexive repair loop: max 3 attempts per vulnerability; record iteration count.
 - Assistive posture: the agent opens a PR on a `fix/ai-remediation-...` branch; a human approves every merge. No runtime self-modification of the pipeline; no production deployment.
 

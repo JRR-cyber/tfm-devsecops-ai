@@ -29,6 +29,37 @@ resultados aplican a este modelo), que se declara en Amenazas a la validez. Se
 mantiene un modelo open-weights, coherente con la premisa de "modelo asequible y
 reproducible" del plan.
 
+**Comprobación con la página oficial de modelos de Groq (16-11-2026).** Llama 3.3
+70B y Llama 3.1 8B siguen listados, pero con precio y límites "Contact Sales": solo
+están disponibles con contrato Enterprise, no en el plan gratuito ni en el plan de
+pago *Developer*. Pagar no los recupera, así que la elección se mantiene.
+`gpt-oss-120b` en el plan Developer: $0,15 / $0,60 por millón de tokens de
+entrada/salida, 250K tokens/min y 1K peticiones/min.
+
+**Plan de pago.** Para el ensayo del 4.10 y la Fase 5 se usará el plan Developer
+con un **tope de gasto de $10/mes** (límite de la consola de Groq, que bloquea la
+API al alcanzarlo). Estimación pesimista de la rejilla completa: ~$2,50, o ~$6 si
+los tokens de razonamiento triplicaran la salida. El ensayo del 4.10 medirá el
+coste real por llamada antes de la Fase 5. A 16-11-2026 la contratación está
+**pendiente**: Groq tiene las altas al plan Developer "temporalmente no
+disponibles por alta demanda". Los pasos 4.7–4.9 no la necesitan (se prueban con un
+LLM simulado y pocas llamadas reales).
+
+**Plan gratuito por tandas (17-11-2026).** Con el plan Developer aún bloqueado, el
+4.10 se ejecuta en el plan gratuito, que para `gpt-oss-120b` permite 30
+peticiones/min, 1.000 peticiones/día, 8K tokens/min y 200K tokens/día. La demo
+real midió ~5.900 tokens por caso completo (triaje + 2 intentos), así que los 33
+casos caben en 1–2 días de cuota. El límite por minuto no estorba, porque cada
+intento ya espera ~95 s al rescan de CodeQL. Cuando se agota la cuota diaria, el
+cliente lanza `GroqQuotaExhausted` sin reintentar, con el tiempo de espera que
+indica Groq (cabecera `Retry-After` o "try again in …" del mensaje). El lote se
+detiene y se relanza después con el mismo comando: el log (4.5) evita repetir lo
+ya hecho. Un 429 corto (por minuto) se sigue esperando dentro del cliente. No se
+cambia de proveedor: aunque otros sirven el mismo modelo, mezclar proveedores
+dentro de un experimento rompería el diseño within-subject. Si la Fase 5 no cupiera
+en el plan gratuito, el cambio se aplicaría a todo el experimento y se registraría
+como decisión nueva.
+
 ## Estado por paso
 
 | Paso | Descripción | Estado |
@@ -53,7 +84,10 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 | 4.4 | Hallazgos reubicados (fingerprint cambiado por el parche) → RELOCATED, no NEW | **hecho** — `regression.py` |
 | 4.5 | Registro JSONL por intento (reanudable; tokens y tiempo) | **hecho** — `results.py` |
 | 4.6 | Decisión del oráculo funcional (`dataset.md` §7) | **hecho** — [D9](../../docs/benchmark/decisions.md): seguridad doble (CodeQL + exploit sobre el parche) y funcional por niveles (tests de API en Juice Shop, suite del paquete T1, diferencial T2) |
-| 4.7–4.10 | Bucle reflexivo (3 intentos), implementación del oráculo de D9, etiquetado/escalado de PRs, ensayo de punta a punta | pendiente |
+| 4.7 | Bucle reflexivo: hasta 3 intentos, con el motivo del rechazo como feedback | **hecho** — `repair_loop.py` |
+| 4.8 | Implementación de los oráculos de D9 (preregistro + ejecutores) | **hecho** — `oracle_juiceshop.py`, `oracle_secbench.py`: Juice Shop (3), exploit SecBench (30), T1 (17), T2 (13) |
+| 4.9 | Etiquetado y escalado de PRs | **hecho** — `publish.py`; `triage_engine.py` encadena triaje → bucle → publicación |
+| 4.10 | Ensayo de punta a punta sobre los 33 casos | **hecho** — `run_dataset.py`; 2 ensayos: 4 fallos del agente corregidos tras el primero; el segundo, 19 ACCEPTED, 11 ESCALATED, 3 NOT_TP |
 
 ## Aislamiento con worktrees (4.1)
 
@@ -292,6 +326,522 @@ faltan.
 python scripts/ai_agent/results.py summary results/run.jsonl
 ```
 
+## Bucle reflexivo (4.7)
+
+`repair_loop.py` da al agente hasta **3 intentos** por vulnerabilidad (fijado por
+el roadmap) para producir un parche aceptable:
+
+```
+intento k:  remediate (con los intentos 1..k-1 rechazados como feedback)
+            → verify_patch (worktree de la base, rescan CodeQL, 4.1–4.4, + oráculos de D9 en 4.8)
+            → ¿aceptado?  sí → fin (ACCEPTED);  no → feedback → intento k+1
+tras 3 rechazos → ESCALATED (se escala a un humano; etiqueta del PR en 4.9)
+```
+
+**Criterio de aceptación.** Un intento se acepta solo si se cumplen las cuatro:
+
+1. El diff se aplica.
+2. El objetivo queda **FIXED** (4.3: su fingerprint desaparece y no está reubicado).
+3. El parche **no introduce ningún NEW** (una regresión de seguridad).
+4. Todos los oráculos adicionales pasan. `verify_patch` ya acepta una lista de
+   `checks` que se ejecutan sobre el worktree parcheado; los implementa el 4.8.
+
+**Feedback.** El motivo del rechazo se escribe para que el modelo pueda actuar:
+
+| Resultado del intento | Feedback al modelo |
+|---|---|
+| NO_DIFF | No devolvió ningún diff; debe devolver un único bloque ```diff |
+| APPLY_FAILED | No se pudo aplicar (motivo); las líneas de contexto y `-` deben copiarse literalmente del fichero original |
+| NOT_FIXED | CodeQL sigue reportando la regla en `fichero:línea`; el dato contaminado sigue llegando al *sink* |
+| NOT_FIXED (reubicado) | La edición cambió la línea marcada, pero el flujo sigue llegando al *sink* (nueva línea) |
+| FIXED con NEW | El objetivo desaparece, pero aparecen hallazgos nuevos (regla, `fichero:línea` y mensaje de CodeQL) |
+| Oráculo fallido (4.8) | `Check '<nombre>' failed: <motivo>` |
+
+Decisiones:
+
+- **Cada intento se aplica al fichero original**, sobre el mismo commit base,
+  nunca encima de un intento anterior. Así cada verificación es independiente y
+  comparable, y el prompt se lo dice al modelo.
+- **El intento 1 usa exactamente el prompt de la Fase 3.** A partir del 2 se
+  añaden *todos* los intentos rechazados (diff + motivo), no solo el último, para
+  que el modelo no vuelva a un arreglo que ya falló. La estrategia, la traza y el
+  RAG de la condición no cambian entre intentos.
+- **Registro (4.5):** cada intento se guarda con su número, `accepted`,
+  `feedback`, `max_attempts` y los `checks` (esquema 2). Al relanzar, el historial
+  se reconstruye desde el log y se sigue en el intento siguiente. El resumen
+  (`results.py summary`) da la **convergencia**: bucles ACCEPTED / ESCALATED /
+  INCOMPLETE (interrumpidos) y en qué intento se aceptaron (métrica de la Fase 5).
+- **Un fallo de infraestructura** (CodeQL que falla, red) lanza una excepción y
+  **no se registra**: no dice nada del modelo, así que al reanudar se repite el
+  intento.
+- **Dónde van los logs.** Los de desarrollo y ensayo (incluido el 4.10), en
+  `results/dev/`, que git ignora (`.gitignore` ya excluye `results/`). Los de la
+  Fase 5 se commitearán como datos de la tesis, porque son la evidencia de los
+  resultados; su ruta versionada se fija al preparar la Fase 5.
+
+Validación:
+
+- **Offline** (LLM y verificador simulados, log real), 22 comprobaciones:
+  aceptación en el intento 1 con un prompt idéntico al de la Fase 3; NO_DIFF →
+  APPLY_FAILED → NOT_FIXED termina en ESCALATED con el historial creciendo en cada
+  prompt; un NEW rechaza un FIXED; feedback de reubicado y de oráculo fallido;
+  caída en la llamada del intento 2 y reanudación (solo se hacen las llamadas que
+  faltan y el historial sale del log); un error de infraestructura no se registra;
+  un bucle terminado no repite llamadas; resumen de convergencia.
+- **Real** (CodeQL 2.27.4 y worktrees reales, LLM con guion para no gastar API),
+  sobre la SQLi de `login.ts:34`:
+
+  | Intento | Parche | Resultado | Rescan |
+  |---|---|---|---|
+  | 1 | Cosmético (`''` → `""` en la línea vulnerable) | NOT_FIXED reubicado → rechazado; el feedback indica la línea y que el flujo sigue llegando al *sink* | base 111 s + post 94 s |
+  | 2 | El arreglo real del PR #7 (consulta parametrizada) | FIXED, 0 NEW, 93 PERSISTING → **ACCEPTED** | post 88 s (base en caché) |
+
+  5,2 minutos en total; no quedó ningún worktree ni rama temporal.
+- **En vivo** (gpt-oss-120b, plan gratuito, zero-shot con traza y RAG, misma SQLi;
+  16-11-2026): **ACCEPTED en el intento 1**. Consulta parametrizada con
+  `replacements` de Sequelize, FIXED, 0 NEW, 93 PERSISTING. Coste: 1.923 tokens de
+  entrada y 365 de salida (~$0,0005 a precio de lista), 1,1 s de LLM y 89 s de
+  rescan. Es un solo caso (n = 1), pero queda muy por debajo del supuesto
+  pesimista del presupuesto (8K + 2K tokens por llamada de remediación).
+  Observación: el modelo sustituyó el comentario marcador de Juice Shop
+  (`// vuln-code-snippet vuln-line …`) por `// fixed: …`. En una rama de artefacto
+  no importa, pero es un cambio fuera del arreglo estricto. Si se repite, el 4.8
+  debe decidir si los oráculos lo toleran.
+
+```bash
+python scripts/ai_agent/repair_loop.py unified/findings.sarif --fingerprint <fp> --repo-root . \
+    [--strategy cot] [--no-trace] [--no-rag] [--log results/dev/repair.jsonl]
+python scripts/ai_agent/results.py summary results/dev/repair.jsonl
+```
+
+## Oráculos de verificación de D9 (4.8)
+
+El 4.8 implementa los oráculos que decidió [D9](../../docs/benchmark/decisions.md).
+Se conectan al bucle (4.7) como `checks` de `verify_patch`: se ejecutan sobre el
+worktree parcheado, después del rescan, y un oráculo que falla rechaza el intento
+y su motivo llega al modelo como feedback. `repair_loop.py` los activa por
+defecto (`--no-oracles` deja solo CodeQL). Un oráculo que no aplica a un hallazgo
+devuelve `None`; un fallo de infraestructura (Docker, red, registro desfasado)
+lanza una excepción y no se registra.
+
+| Oráculo | Casos | Qué comprueba | Módulo |
+|---|---|---|---|
+| `juice-shop-functional` | 3 Juice Shop | Los tests *funcionales* de la API de la ruta siguen pasando | `oracle_juiceshop.py` |
+| `juice-shop-exploit` | 3 Juice Shop | Los tests *de ataque* de la ruta dejan de pasar (seguridad dinámica) | `oracle_juiceshop.py` |
+| `secbench-exploit` | 30 SecBench | El exploit oficial de SecBench.js deja de funcionar contra el paquete parcheado | `oracle_secbench.py` |
+| `secbench-t1-suite` | 17 SecBench | La suite de tests del propio paquete sigue pasando | `oracle_secbench.py` |
+| `secbench-t2-differential` | 13 SecBench | Mismo comportamiento que la versión original con entradas benignas preregistradas | `oracle_secbench.py` |
+
+### Preregistro
+
+Fijado antes de que exista ningún parche de la Fase 5 y versionado en
+`benchmarks/oracles/`:
+
+- **`juice-shop-api.json`**: los 41 tests de las tres rutas, clasificados como
+  `functional` (26) o `vuln` (15), con la justificación de los casos dudosos (p. ej.
+  los cuatro tests "SQL Injection fails…" afirman un error SQLITE, es decir, que la
+  entrada llega al parser: son de vulnerabilidad). Los 41 pasan sobre la base.
+- **`secbench-functional.json`**: para cada caso, el nivel (T1/T2), de dónde salen
+  los tests (tarball o repositorio en el commit de la etiqueta de la versión) y el
+  comando curado, o el driver T2, con su validación. Lo valida
+  `scripts/benchmarks/secbench_oracle_register.py`.
+- **`t2/`**: los 13 drivers diferenciales con sus entradas benignas.
+
+### Juice Shop
+
+Los tests de API se ejecutan dentro del worktree parcheado con el runner nativo de
+Node (reporter JUnit, porque nombra cada test). El worktree no tiene
+`node_modules` ni artefactos de build, así que se **enlazan** (junctions de
+Windows) los de tu checkout: `node_modules`, `build` y `frontend/dist`. Los dos
+últimos solo satisfacen las precondiciones de arranque de Juice Shop (que los
+ficheros existan): los tests importan `server.ts` y ejecutan las rutas TypeScript
+del worktree con tsx, es decir, el código parcheado.
+
+**Seguridad de los enlaces.** `git worktree remove --force` borra el contenido no
+versionado; si entrara en un enlace, vaciaría tus carpetas reales. Por eso los
+enlaces se quitan siempre al acabar el oráculo y, además, `worktree.remove` los
+quita antes de llamar a git (por si el proceso muere a mitad). Comprobado:
+borrando el worktree con los enlaces todavía dentro, `node_modules` (848
+entradas), `build` (448) y `frontend/dist` (764) quedan intactos.
+
+Dos detalles encontrados al validarlo: el reporter JUnit de Node escapa dos veces
+las comillas de los nombres (`&amp;quot;`), y un test preregistrado que no
+aparece en el informe se trata como error del oráculo, no como fallo del parche.
+
+### SecBench.js: exploit
+
+`run_case.sh` acepta `PATCHED_SRC`: instala la versión vulnerable publicada y
+sobrescribe `node_modules/<paquete>` con el `src/` parcheado del worktree.
+`src/` es exactamente el tarball de npm de esa versión (`npm pack`), así que lo
+único que cambia es el parche. Validación: sobre la base el exploit funciona; con
+el código de la versión corregida oficial (`fixed/`) deja de funcionar
+(`set-value`, `dns-sync`).
+
+**Limitación:** el oráculo prueba **el** exploit oficial, no cualquier ataque. El
+arreglo oficial de `dns-sync` es incompleto (etiquetado UNCERTAIN en el triaje,
+D3) y aun así supera este exploit.
+
+### SecBench.js: T1 (suite del propio paquete)
+
+`run_suite.sh` ejecuta la suite sobre el `src/` montado (base o parcheado) en el
+harness de Node 16. Si el tarball no trae los tests, se toman del repositorio
+original en el commit de la etiqueta de la versión (caché fuera del repo, sin
+`.git`). Las dependencias se guardan en un volumen de Docker por caso, de modo que
+cada ejecución tarda 2–17 s.
+
+**Criterios de un comando T1.** Se excluyen los linters (`xo`, `standard`,
+`eslint`, `jshint`) y los umbrales de cobertura (`--100`, `-t 100`), porque no
+son regresiones funcionales. También se excluyen los tests que ya fallan sobre la
+base (2 de *tree-shaking* en underscore, 1 de hoek, 2 ficheros de tough-cookie).
+
+**Falsos "pasa" detectados por el sondeo:** `madlib-object-utils` sale con 0 si
+falta grunt; el mocha 1.x de `dns-sync`, `forwarded` y `fresh` sale con 0 en
+Node 16 sin ejecutar nada (se fija mocha 5.2); `hosted-git-info` sale con 0 sin
+tests en el tarball; `tough-cookie` igual.
+
+**Control de sensibilidad.** Que la suite pase sobre la base no basta: tiene que
+llegar al código vulnerable. El registro ejecuta además la suite sobre un
+**mutante** con `throw` insertado justo antes de la línea del sink, y exige que
+falle. Si el `throw` rompe la sintaxis (sink dentro de una expresión multilínea),
+se inserta al inicio del fichero y la sensibilidad queda como `module-load`, más
+débil (jsonpointer, libnested, forwarded).
+
+| Resultado | Casos |
+|---|---|
+| **T1 válido (17)** | underscore (203 tests), bestzip (77), connection-tester, dns-sync, dset (12), hoek (194), json-ptr (195), jsonpointer, libnested (30), madlib-object-utils (8), set-value (26), color-string, forwarded (4), fresh (22), hosted-git-info (3.246), is-email, tough-cookie |
+| **Rechazado por sensibilidad → T2 (5)** | apex-publish-static-files, diskusage-ng, macaddress, whereis, m-server: pasan sobre la base pero siguen pasando con el `throw` en el sink |
+| **Sin suite utilizable → T2 (8)** | pixl-class, portprocesses, serve-here.js (sin tests); giting, tinyserver2 (repositorio inaccesible); async-git (sin etiqueta de la versión); react-dev-utils, thi.ng-egf (monorepos) |
+
+D9 estimaba "hasta 25" casos T1; tras exigir que la suite llegue al sink quedan
+17. Riesgo declarado: los tests de `connection-tester` y `dns-sync` usan la red
+(TCP a hosts públicos, DNS); un fallo ahí debe contrastarse con la conectividad.
+
+**El ejemplo de D9, medido.** Un parche saboteador para `set-value` (`return
+target;` como primera línea de `set()`) **engaña al exploit** ("the exploit no
+longer succeeds") y **T1 lo detecta** (23 de 26 tests fallan). Sin oráculo
+funcional, contaría como arreglo.
+
+### SecBench.js: T2 (diferencial)
+
+Para los 13 casos sin suite válida, un **driver** preregistrado
+(`benchmarks/oracles/t2/<caso>.js`) llama al mismo punto de entrada que ataca el
+exploit, pero con **entradas benignas** fijadas antes de cualquier parche, y
+devuelve lo observable. `run_diff.sh` instala la versión vulnerable dos veces
+(original, y con el `src/` parcheado encima) y `diff_runner.js` ejecuta cada
+entrada contra cada instalación **en un proceso nuevo** (sin estado compartido) y
+compara. Una diferencia en cualquier entrada es una regresión funcional.
+
+Qué se observa, según la clase:
+
+| Clase | Observación |
+|---|---|
+| command-injection (10) | `child_process` interceptado: los comandos se registran como **argv**, no como texto, para que formas equivalentes coincidan (`exec("git reset 'x'")` = `execFile("git", ["reset", "x"])`); las tuberías se separan en segmentos y `echo X \| cmd` se registra como `cmd` con X por stdin (= `execFileSync(cmd, args, {input: X})`). Las salidas falsas de los comandos son plausibles (`df`, `lsof`, `ifconfig`…) para que el código llegue a procesarlas. Se compara también el valor devuelto |
+| path-traversal (3) | El servidor real se arranca sobre un sitio de prueba fijo y se compara la respuesta (estado, tipo, cuerpo) a rutas legítimas, a un listado de directorio y a un fichero inexistente |
+| code-injection (pixl-class) | El comportamiento de las clases que crea `create()`: constructor heredado, métodos, estáticos, mixins |
+
+Decisiones de diseño de los drivers (documentadas en cada uno): `macaddress`
+simula `darwin` para llegar a `lib/unix.js` (en Linux carga `lib/linux.js`; por eso
+su suite T1 no llegaba al sink); `whereis` no prueba el caso "no encontrado",
+que solo llega a ramas exclusivas de Windows que un arreglo puede eliminar con
+razón; `tinyserver2` no prueba un fichero inexistente, porque el original responde
+200 con cuerpo vacío y un arreglo puede pasar a 404 con razón.
+
+**Validación** (misma regla que T1): sobre la base, original y copia dan las
+mismas observaciones en todas las entradas (también comprueba que el driver es
+determinista); con el `throw` antes del sink, alguna entrada cambia. Los 13
+drivers la superan (`thi.ng-egf` con sensibilidad `module-load`: su sink está
+dentro de una expresión flecha). Además se revisó que lo observado tiene sentido,
+no solo que coincide.
+
+### ¿Aceptan los oráculos los arreglos correctos?
+
+Contraprueba: se aplicó como "parche" la versión corregida oficial de los 10 casos
+que la tienen vendorizada (`fixed/`), con los tres oráculos:
+
+| Resultado | Casos |
+|---|---|
+| Exploit: **acepta los 10** | — |
+| Funcional: acepta | underscore, connection-tester, dns-sync, madlib-object-utils, hosted-git-info |
+| Funcional: rechaza por un **defecto real del arreglo oficial** | **giting** 0.0.8: aplica `encodeURIComponent` a la rama, así que `feature/login` pasa a `feature%2Flogin` y las ramas con `/` dejan de funcionar |
+| Funcional: rechaza por **cambios ajenos** de la nueva versión | set-value 4.0.1 (versión mayor, cambia la API), hoek 5.0.3 (cambian `escape*` y errores de base64), jsonpointer 5.0.0 (el tarball ya no trae `test.js`), serve-here.js 1.2.0 (nueva dependencia `commander` que la 1.1.0 no instala) |
+
+Ningún rechazo es un error del oráculo. Los cuatro por cambios ajenos son el
+motivo por el que D9 descartó comparar contra la versión corregida: los parches del
+agente son de un solo fichero y no arrastran esos cambios.
+
+**Prueba de punta a punta con oráculos** (CodeQL, worktrees y LLM con guion, SQLi
+de `login.ts`): el parche cosmético se rechaza por CodeQL (reubicado) **y** por el
+oráculo dinámico (5/5 ataques siguen funcionando); el arreglo del PR #7 da FIXED,
+13/13 funcionales y 0/5 ataques → ACCEPTED en el intento 2.
+
+```bash
+python scripts/ai_agent/oracle_juiceshop.py --tree . --target src/app/juice-shop/routes/login.ts
+python scripts/ai_agent/oracle_secbench.py exploit --tree . --case prototype-pollution/set-value_3.0.0
+python scripts/ai_agent/oracle_secbench.py suite --case prototype-pollution/set-value_3.0.0
+python scripts/ai_agent/oracle_secbench.py diff --case command-injection/async-git_1.13.1
+python scripts/benchmarks/secbench_oracle_register.py [caso ...]   # revalidar el preregistro (T1 y T2)
+```
+
+## Etiquetado y escalado (4.9)
+
+`publish.py` convierte el resultado del bucle en lo que recibe la persona que
+revisa. **Solo se abre un PR para un parche verificado**, el intento que el bucle
+aceptó. Un caso escalado no tiene parche verificado, así que no se sube código: se
+abre un *issue* con cada intento, su diff y el motivo del rechazo.
+
+| Resultado del bucle | Se publica como | Etiquetas |
+|---|---|---|
+| ACCEPTED con evidencia completa | PR | `ai-fixed` |
+| ACCEPTED con salvedades | PR, con sección "Por qué revisar con especial atención" | `ai-fixed` + `ai-needs-review` |
+| ESCALATED tras 3 intentos | issue | `ai-escalated` |
+
+Todo PR sigue necesitando aprobación humana (postura asistiva): las etiquetas solo
+dicen cuánto cubre ya la verificación automática.
+
+**Salvedades** (reglas fijas; cada una añade `ai-needs-review` y se explica en el
+PR):
+
+- Ningún oráculo funcional o de exploit cubre el hallazgo. Es el caso de los
+  candidatos fuera de los 33 del dataset, que solo verifica CodeQL.
+- El oráculo funcional es el más débil: diferencial (T2), o una suite T1 con
+  sensibilidad `module-load`.
+- El parche también cambió otros hallazgos (DISAPPEARED, o RELOCATED aparte del
+  objetivo): efectos más allá del arreglo.
+
+El PR incluye la tabla de verificación (CodeQL y cada oráculo con su resultado),
+los intentos anteriores si los hubo (con el motivo de cada rechazo) y el parche.
+
+`triage_engine.py` encadena ya todo: triaje → (si TP) bucle reflexivo con CodeQL y
+oráculos → publicación. Por defecto es dry-run (muestra el PR o el issue que
+crearía); `--commit` crea la rama local; `--open` publica (push + PR, o issue). El
+triaje también se guarda en el registro, y al relanzar no se vuelve a pagar.
+
+Validación offline (12 comprobaciones): evidencia completa → solo `ai-fixed`;
+historial de intentos en el PR; candidato sin oráculos → `ai-needs-review` con 2
+salvedades; T2 y T1 `module-load` → salvedad; T1 con sensibilidad en la línea
+del sink → sin salvedad; efectos colaterales; escalado → issue sin diff; dry-run
+del PR con el parche real del PR #7 (se aplica y muestra las etiquetas).
+
+**Demo real de punta a punta (17-11-2026,
+[PR #10](https://github.com/JRR-cyber/tfm-devsecops-ai/pull/10), borrador, no se
+fusiona).** gpt-oss-120b (plan gratuito, zero-shot con traza y RAG) sobre la SQLi
+de búsqueda (JS-02, `search.ts:23`):
+
+| | Intento 1 | Intento 2 |
+|---|---|---|
+| Parche | Consulta parametrizada **con** `type: QueryTypes.SELECT` | Consulta parametrizada, sin `type` |
+| CodeQL | FIXED, 0 NEW | FIXED, 0 NEW |
+| Ataques (9) | 0 funcionan | 0 funcionan |
+| Funcionales (6) | **6 fallan** | 6 pasan |
+| Resultado | rechazado | **ACCEPTED** → PR `ai-fixed` |
+
+El primer parche eliminaba la vulnerabilidad y CodeQL y el exploit lo daban por
+bueno, pero `QueryTypes.SELECT` cambia lo que devuelve `sequelize.query` (filas
+en lugar de `[filas, metadatos]`), y el `.then(([products]) => …)` siguiente se
+quedaba con la primera fila: **la búsqueda de productos quedaba rota**. Es el
+caso que motivó D9, esta vez producido por el modelo real; el bucle lo corrigió
+con el feedback de los tests. Etiqueta `ai-fixed` sin salvedades (hay oráculo
+funcional y de ataque; el hallazgo vecino de la línea 22 no cambió). Coste del caso
+completo (triaje y 2 intentos): 4.700 + 1.227 tokens (~$0,0014); 4 s de LLM y
+188 s de rescan: el cuello de botella es CodeQL, no la API.
+
+Fallo encontrado por la demo: el cuerpo del PR (con emojis) se enviaba a `gh` con
+la codificación de la consola de Windows (cp1252) y la creación del PR falló
+**después** del push. Ahora el texto va en UTF-8, se comprueba el push y, si falla
+la creación del PR, el informe lo dice (la rama queda subida) en vez de terminar
+con una traza.
+
+```bash
+python scripts/ai_agent/publish.py labels [--apply]      # crea/actualiza las 3 etiquetas en GitHub
+python scripts/ai_agent/triage_engine.py unified/findings.sarif --repo-root . \
+    --fingerprint <fp> --run [--strategy cot] [--commit] [--open]
+```
+
+## Ensayo de punta a punta (4.10)
+
+`run_dataset.py` pasa los 33 casos del dataset por el agente completo bajo una
+condición (estrategia × traza × RAG): triaje → si TP, bucle reflexivo con CodeQL y
+los oráculos de D9 → decisión de publicación. La publicación es siempre **dry-run**:
+el texto del PR o del issue va al informe y no se sube nada, porque el dataset es el
+benchmark (las demos usan `triage_engine.py --open --draft` sobre un hallazgo). El
+mismo script servirá para la rejilla de la Fase 5, condición a condición.
+
+**Objetivo preregistrado por caso.** `dataset.csv` identifica cada caso por su
+*sink* (fichero + línea), pero el bucle juzga FIXED sobre **un** fingerprint, y cerca
+del *sink* CodeQL suele dar más de un hallazgo con traza (11 de 33 casos: dos reglas
+en la misma línea o el mismo flujo marcado en varias líneas). La correspondencia
+caso → hallazgo se fija antes de cualquier parche en
+[`benchmarks/remediation-targets.csv`](../../benchmarks/remediation-targets.csv)
+(`scripts/benchmarks/remediation_targets.py`), con una regla determinista: CodeQL
+con traza en la ventana de ±10 líneas de C7 y regla aceptada por C7 para el caso.
+Entre esos, gana primero una regla cuyo origen sea la entrada del paquete, frente a
+las que modelan el entorno o la línea de comandos
+(`js/shell-command-injection-from-environment`,
+`js/indirect-command-line-injection`); después, el más cercano al *sink*; si hay
+empate, por regla y fingerprint. La preferencia por el origen se añadió tras el
+primer ensayo (ver abajo). Regenerado con
+el SARIF de CI de `84ce0be` y el de `1e6ca25`, sale idéntico: los fingerprints no
+dependen de la línea. En SecBench, los demás hallazgos de la ventana siguen en el
+código, pero el exploit comprueba la vulnerabilidad completa.
+
+**Hallazgo: solo 12 de los 33 casos pasan el filtro CVSS ≥ 7.** CodeQL puntúa por
+*regla*, no por vulnerabilidad: `js/shell-command-*` vale 6.3 y
+`js/prototype-polluting-assignment` y `js/unsafe-code-construction` valen 6.1. Pasan
+los 3 de Juice Shop (8.8), los 3 de path traversal y los 6 de ReDoS (7.5). Las 12
+inyecciones de comandos, las 7 contaminaciones de prototipo y las 2 inyecciones de
+código quedan por debajo. Comparado con el CVSS v3 de NVD de cada CVE
+([`nvd-cvss.csv`](../../benchmarks/nvd-cvss.csv)), CodeQL y NVD solo coinciden en el
+lado del umbral en 6 de 29 casos, con errores en las dos direcciones. Decisión
+([D11](../../docs/benchmark/decisions.md)): la RSR se mide sobre los 33 y se desglosa
+por los dos subconjuntos. El umbral sigue siendo la política de producción de
+`triage_engine.py`. `run_dataset.py` repara todos los casos por defecto, y `--policy`
+aplica el filtro: los casos por debajo solo pasan por el triaje.
+
+**Por tandas en el plan gratuito.** El prompt más grande del dataset ronda los 2K
+tokens de entrada, muy por debajo del límite de 8K por minuto. Una pasada completa
+con aceptación en el intento 1 son ~100K tokens, y con reintentos se esperan
+150–250K: 1–2 días de cuota. Si se agota, el lote escribe el informe hasta donde
+llegó, dice cuándo relanzar y sale con el código 75. Al relanzar el mismo comando no
+se repite nada. Antes de gastar tokens, la comprobación previa verifica la clave,
+CodeQL, Docker, la imagen del harness, el build de Juice Shop y que los 33
+fingerprints estén en el SARIF.
+
+```bash
+# Git Bash, desde la raíz; GROQ_API_KEY y CODEQL_CLI exportadas, Docker arrancado
+gh run download <run de main> -n unified-findings -D ci
+python scripts/ai_agent/run_dataset.py ci/findings.sarif                 # todos, zero-shot, traza + RAG
+python scripts/ai_agent/run_dataset.py ci/findings.sarif --only JS-02    # un caso
+python scripts/ai_agent/run_dataset.py ci/findings.sarif --report-only   # informe desde el log
+python scripts/ai_agent/results.py summary results/dev/rehearsal-4.10.jsonl
+```
+
+El informe (`results/dev/rehearsal-4.10.md`) tiene una fila por caso con el
+triaje, el resultado (ACCEPTED / ESCALATED / NOT_TP / POLICY / PENDING), la
+secuencia de intentos con los oráculos que fallaron, las etiquetas, los tokens y los
+tiempos, además del texto que se habría publicado. Validación offline (Groq y
+verificador simulados, SARIF y log reales): 19 comprobaciones, incluidas la parada
+por cuota a mitad de lote y a mitad de bucle, la reanudación sin llamadas repetidas,
+el informe reconstruido sin llamadas y `--policy`.
+
+### Primer ensayo (18-11-2026) y correcciones
+
+Ejecución real con zero-shot, traza y RAG: 32 de 33 casos en 61 min, 190K tokens
+(123K de entrada y 67K de salida; ~$0,06 a precio de lista). Es casi la cuota diaria
+del plan gratuito. CodeQL ocupó ~30 min de rescans.
+
+| Resultado | Casos |
+|---|---|
+| ACCEPTED | 17 (intento 1: 8, intento 2: 5, intento 3: 4) |
+| ESCALATED | 7 |
+| NOT_TP (el triaje dijo FP) | 8 |
+| Interrumpido (JS-03) | 1 |
+
+El bucle reflexivo aportó: 9 de los 17 aceptados necesitaron el feedback de un
+intento rechazado. Los oráculos de D9 rechazaron parches que CodeQL daba por
+buenos. En macaddress el exploit siguió funcionando en los 3 intentos con CodeQL en
+FIXED. En pixl-class, async-git, react-dev-utils y JS-02, el parche rompía la
+funcionalidad (T2 o tests de API).
+
+El ensayo destapó cuatro fallos del agente, no del modelo. Están corregidos y el
+ensayo se repitió con un log nuevo (siguiente sección):
+
+1. **Un parche que impide cargar el código paraba el lote (JS-03).** Si el código
+   parcheado no compila o lanza al importarse, `node --test` informa de un único
+   fallo con el nombre del fichero y sin el texto del error, y el oráculo de Juice
+   Shop lo trataba como un fallo de infraestructura. Ahora cuenta como fallo
+   funcional, con el error de compilación o de carga sacado de la consola (se añade
+   el reporter `spec` a stdout) como feedback para el modelo. Probado con un error
+   de sintaxis y con un `throw` al cargar.
+2. **Objetivo mal elegido en 4 casos de inyección de comandos.** En
+   connection-tester, dns-sync y giting, el hallazgo elegido era el de
+   `js/shell-command-injection-from-environment`, cuya traza empieza en
+   `process.execPath` o `process.cwd()`. No es el vector del CVE, y el triaje
+   acertó al llamarlo FP. En bestzip, el elegido empezaba en `process.argv` (la
+   CLI), mientras que el exploit ataca la API. Con la preferencia por el origen del
+   paquete, los cuatro pasan a `js/shell-command-constructed-from-input`, con origen
+   en la entrada de la función (`host`, `hostname`, `opts`, `options`). Solo
+   portprocesses conserva un origen en `process.argv`, porque es el único hallazgo de
+   su ventana. Queda como limitación.
+3. **La regex de ReDoS no llegaba al prompt.** En fresh y tough-cookie la regex es
+   una constante del módulo, fuera de la función que muestra el RAG, y el modelo
+   opinó sobre regex "típicas" sin verlas. CodeQL sí la señala en los
+   `relatedLocations` (enlaces del mensaje: "This [regular expression](1) …").
+   `sarif_parser` los guarda ahora en `Finding.related` y `trace_context` añade un
+   bloque "Locations referenced by the message" con la línea de código de cada
+   enlace. Para que la condición sin traza (5.3) no reciba información de flujo por
+   esta vía, se omiten las ubicaciones que son pasos de la traza y los enlaces que
+   nombran un origen ("depends on [library input]", "injected from …"). En los 33
+   objetivos el bloque aparece en 11 casos: la regex en 5 de ReDoS, la llamada a
+   la shell en 5 de inyección de comandos y "interpreted as code" en underscore.
+4. **El 38% de los intentos no se pudo aplicar (20 de 52).** Clasificados uno a uno:
+   en 5 el modelo copió los números de línea del prompt (`33:   settings = …`), en 5
+   cambió la indentación (espacios en lugar de tabuladores, o un desplazamiento de
+   1–2 espacios) y en 10 el contenido no existía (líneas omitidas, `require (` por
+   `require(`, una regex reescrita, un cuerpo de función inventado). El aplicador
+   tolera ahora los dos primeros tipos, como `git apply --ignore-whitespace` o el
+   *fuzz* de `patch`. Prueba en orden: literal; líneas en blanco sin el espacio
+   inicial; sin los prefijos `NN: ` (si todas las líneas viejas los llevan);
+   comparando líneas sin indentación, si el bloque encaja en **un único** sitio. Las
+   líneas añadidas se reindentan al estilo del fichero (tabuladores o espacios, con
+   el desplazamiento más frecuente) y las de contexto conservan las del fichero. El
+   contenido nunca se adivina: los 10 errores de contenido siguen fallando. Cada
+   aplicación deja el modo en el log (`[mode=exact|lineno|whitespace]`) y el informe
+   cuenta los hunks que necesitaron tolerancia. Al reaplicar los 52 diffs del
+   ensayo, 10 de los 20 fallidos se aplican y los 32 que ya se aplicaban siguen en
+   modo exacto. Validación offline: 8 comprobaciones (reindentado a tabuladores,
+   desplazamiento con anidamiento, token cambiado, línea omitida y coincidencia
+   ambigua rechazados).
+
+Lo que es del modelo se queda como resultado: juzga mal ReDoS aunque vea la regex
+(forwarded `/ *, */`, color-string, hosted-git-info) y comete errores de contenido
+en los diffs.
+
+### Segundo ensayo, con las correcciones (19-11-2026)
+
+Misma condición, con un log nuevo (`results/dev/rehearsal-4.10b.jsonl`). Los 33
+casos se completaron en dos tandas: la cuota diaria se agotó al llegar a JS-03 y se
+relanzó el mismo comando. Fueron 215K tokens (138K de entrada y 77K de salida;
+~$0,07), 254 s de LLM y 100 min de rescans: CodeQL sigue siendo el cuello de
+botella.
+
+| | 1.er ensayo | 2.º ensayo |
+|---|---|---|
+| ACCEPTED | 17 (#1: 8, #2: 5, #3: 4) | **19** (#1: 14, #2: 3, #3: 2) |
+| ESCALATED | 7 | 11 |
+| NOT_TP (el triaje dijo FP) | 8 | **3** |
+| Intentos con diff no aplicable | 20 de 52 (38%) | **8 de 59 (14%)** |
+
+- **Triaje.** Los falsos negativos bajan de 8 a 3. Tres desaparecen por la
+  corrección del objetivo (connection-tester, dns-sync y giting pasan a TP) y dos
+  porque la regex ya llega al prompt (color-string y tough-cookie). Siguen en FP
+  forwarded, fresh y hosted-git-info. En fresh el modelo ve `/ *, */` y aun así lo
+  considera lineal: es un error del modelo.
+- **Aplicación.** De los 65 hunks aplicados, 31 encajaron literalmente, 14
+  necesitaron quitar números de línea y 20 tolerar espacios en blanco. La mitad de
+  los parches del modelo dependen de esa tolerancia, y conviene declararlo. Los 8
+  fallos que quedan son de contenido; por ejemplo, en serve-here.js el modelo
+  parchea `response.js`, un fichero que no es el del hallazgo, con líneas que no
+  existen.
+- **Oráculo de carga, en real.** En JS-03, el intento 2 no compilaba. El modelo
+  recibió `ERROR: Expected ":" but found "}"` como feedback y el intento 3 se
+  aceptó.
+- **CodeQL detectó una regresión de seguridad.** En giting, los 3 parches pasaban a
+  `execFile` con argumentos del usuario y CodeQL los marcó como NEW
+  (`js/second-order-command-line-injection`, inyección de opciones en `git`): el
+  caso se escaló correctamente.
+- **CodeQL y el exploit discrepan en las dos direcciones.** En 7 intentos, CodeQL
+  seguía marcando el hallazgo aunque el exploit ya no funcionaba y los tests
+  funcionales pasaban (guardas de prototype pollution que CodeQL no reconoce;
+  json-ptr, libnested, set-value, is-email). En 6, CodeQL lo daba por arreglado y el
+  exploit seguía funcionando (macaddress, portprocesses, madlib). El criterio de D9
+  exige las dos cosas. El log guarda ambas señales, así que la Fase 5 puede dar la
+  RSR estricta y también la de cada oráculo por separado.
+- **Variabilidad del modelo.** Con temperatura 0, en casos que ninguna corrección
+  tocaba el resultado cambia entre ensayos: set-value y portprocesses pasan de
+  ACCEPTED a ESCALATED, y pixl-class, hoek y tinyserver2 se aceptan antes. El modelo
+  no es determinista, y una única pasada por condición mezcla el efecto de la
+  estrategia con ese ruido. Es una decisión de diseño para la Fase 5.
+
 ## Uso de `regression.py`
 
 ```bash
@@ -329,7 +879,8 @@ python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif 
 - **`remediate.py`** — genera el parche como **diff unificado** (Paso 3.6) para un
   TP de CVSS ≥ 7. Mismo contexto estructurado que el triaje (+ RAG por defecto,
   no se parchea lo que no se ve) y las mismas estrategias. Generar el diff es el
-  entregable; aplicarlo y el bucle reflexivo son Fase 4.
+  entregable; aplicarlo y el bucle reflexivo son Fase 4 (`history` lleva los
+  intentos rechazados, 4.7).
   ```bash
   GROQ_API_KEY=... python scripts/ai_agent/remediate.py unified/findings.sarif --fingerprint <fp> --repo-root . --strategy cot --run
   ```
@@ -344,6 +895,13 @@ python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif 
   baseline → parche → rescan → comparación). Ver "Comparación pre/post" arriba.
 - **`results.py`** — registro JSONL reanudable de cada intento (Paso 4.5): clave,
   resultado, tokens, tiempos y procedencia. Ver "Registro de resultados" arriba.
+- **`repair_loop.py`** — bucle reflexivo (Paso 4.7): parche → verificación →
+  feedback → nuevo parche, hasta 3 intentos; ACCEPTED o ESCALATED. Ver "Bucle
+  reflexivo" arriba.
+- **`oracle_juiceshop.py`**, **`oracle_secbench.py`** — oráculos de D9 (Paso 4.8)
+  sobre el worktree parcheado. Ver "Oráculos de verificación de D9" arriba.
+- **`publish.py`** — etiquetado y escalado (Paso 4.9): PR `ai-fixed` [+
+  `ai-needs-review`] o issue `ai-escalated`. Ver "Etiquetado y escalado" arriba.
 - **`rescan.py`** — rescan local post-parche con CodeQL CLI (Paso 4.2), con la
   misma versión y suite que CI y el SARIF con forma de artefacto unificado. Ver
   "Rescan local con CodeQL" arriba.
@@ -353,13 +911,17 @@ python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif 
   python scripts/ai_agent/worktree.py list
   python scripts/ai_agent/worktree.py remove fix/ai-remediation-<regla>-<fp8> [--delete-branch]
   ```
-- **`triage_engine.py`** — orquestador (capstone de la Fase 3): encadena
-  parse → filtro (CVSS≥7 ∩ traza) → triaje → (si TP) parche → PR. Sin argumentos
+- **`triage_engine.py`** — orquestador: encadena parse → filtro (CVSS≥7 ∩ traza)
+  → triaje → (si TP) bucle reflexivo con verificación (4.7–4.8) → PR o issue
+  (4.9). Sin argumentos
   lista los candidatos; con `--fingerprint … --run` ejecuta un hallazgo de punta a
   punta.
   ```bash
   python scripts/ai_agent/triage_engine.py unified/findings.sarif --repo-root .   # lista candidatos
   ```
+- **`run_dataset.py`** — el agente completo sobre los 33 casos del dataset, bajo una
+  condición, reanudable y con parada limpia por cuota; publicación en dry-run e
+  informe en markdown (4.10, reutilizable en la Fase 5).
 - **`evaluate.py`** — probe de desarrollo (NO el experimento de Fase 5): corre el
   triaje sobre el conjunto etiquetado en varios modos (`notrace` / `trace` /
   `trace+rag`) y mide el acuerdo con `labels.csv`. Para cazar bugs y ver el efecto

@@ -89,6 +89,9 @@ class Finding:
     cwes: list[str] = field(default_factory=list)
     code_flows: list[list[CodeFlowStep]] = field(default_factory=list)
     snippet: str | None = None
+    # SARIF relatedLocations with an id, i.e. the targets of the message's links
+    # "[regular expression](1)": id -> location (4.10: e.g. where a ReDoS regex is).
+    related: dict[int, CodeFlowStep] = field(default_factory=dict)
 
     @property
     def label_key(self) -> str:
@@ -129,6 +132,8 @@ class Finding:
                 for flow in self.code_flows
             ],
             "snippet": self.snippet,
+            "related": {i: {"file": r.file, "start_line": r.start_line, "message": r.message}
+                        for i, r in self.related.items()},
         }
 
 
@@ -220,6 +225,20 @@ def _code_flows(result: dict) -> list[list[CodeFlowStep]]:
     return flows
 
 
+def _related(result: dict) -> dict[int, CodeFlowStep]:
+    """relatedLocations that carry an ``id`` (the ones the message links to)."""
+    out: dict[int, CodeFlowStep] = {}
+    for loc in result.get("relatedLocations", []):
+        if "id" not in loc:
+            continue
+        phys = loc.get("physicalLocation", {})
+        out[int(loc["id"])] = CodeFlowStep(
+            file=normalise_uri(phys.get("artifactLocation", {}).get("uri", "")),
+            start_line=int(phys.get("region", {}).get("startLine", 0) or 0),
+            message=loc.get("message", {}).get("text", ""))
+    return out
+
+
 def parse_sarif(path: Path, repo_root: Path | None = None) -> list[Finding]:
     """Read the unified SARIF and return one Finding per result, all runs flattened."""
     sarif = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -251,6 +270,7 @@ def parse_sarif(path: Path, repo_root: Path | None = None) -> list[Finding]:
                 cwes=cwes_from_tags(rule.get("properties", {}).get("tags", [])),
                 code_flows=_code_flows(result),
                 snippet=reader.snippet(uri, start, end),
+                related=_related(result),
             ))
     return findings
 

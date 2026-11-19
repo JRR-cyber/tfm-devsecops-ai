@@ -53,6 +53,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from sarif_parser import Finding, parse_sarif
 
@@ -155,12 +156,29 @@ def compare(pre: list[Finding], post: list[Finding], target_key: str) -> Compari
 # --------------------------------------------------------------------------- verify
 
 @dataclass
+class CheckResult:
+    """Outcome of one extra oracle run on the patched tree (D9, implemented in 4.8)."""
+
+    name: str        # e.g. exploit, t1-suite, t2-differential, juice-shop-api
+    ok: bool
+    detail: str      # short, model-readable reason when not ok (fed back by 4.7)
+    seconds: float = 0.0
+
+
+# An oracle receives the target finding and the patched worktree's path, after the
+# post rescan, while the worktree still exists. It returns None when it does not
+# apply to that finding (e.g. the Juice Shop oracle on a SecBench case).
+Check = Callable[[Finding, Path], "CheckResult | None"]
+
+
+@dataclass
 class Verification:
     applied: bool
     detail: str                         # apply result, or why it stopped
     comparison: Comparison | None
     baseline_cached: bool
     seconds: dict[str, float]           # baseline / post rescan wall time (overhead)
+    checks: list[CheckResult] = field(default_factory=list)
 
 
 def _rev(repo_root: Path, ref: str) -> str:
@@ -169,8 +187,13 @@ def _rev(repo_root: Path, ref: str) -> str:
 
 
 def verify_patch(finding: Finding, diff: str, repo_root: Path, base: str = "main",
-                 out_root: Path | None = None, cli: str | None = None) -> Verification:
+                 out_root: Path | None = None, cli: str | None = None,
+                 checks: list[Check] | None = None) -> Verification:
     """Apply ``diff`` in a throwaway worktree of ``base`` and compare rescans.
+
+    ``checks`` are extra oracles (D9: exploit, functional tests) run on the
+    patched worktree after the post rescan; their results go in
+    ``Verification.checks``.
 
     The worktree and its branch are always deleted: verification only measures;
     keeping the fix and opening the PR is ``remediation_pr.prepare_pr``.
@@ -203,7 +226,8 @@ def verify_patch(finding: Finding, diff: str, repo_root: Path, base: str = "main
         pre_findings = parse_sarif(baseline_dir / "codeql.sarif")
         post_findings = parse_sarif(post.sarif)
         comparison = compare(pre_findings, post_findings, finding.label_key)
-        return Verification(True, result.detail, comparison, cached, seconds)
+        results = [r for r in (check(finding, wt.path) for check in checks or []) if r is not None]
+        return Verification(True, result.detail, comparison, cached, seconds, results)
 
 
 def main() -> None:
