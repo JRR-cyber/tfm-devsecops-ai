@@ -14,6 +14,8 @@ the two conditions is the presence of the trace — nothing else.
 
 from __future__ import annotations
 
+import re
+
 from sarif_parser import Finding, SourceReader
 
 
@@ -31,6 +33,43 @@ def render_trace(finding: Finding, reader: SourceReader | None = None) -> str:
         if code:
             out.append(f"        {code.strip()}")
     return "\n".join(out)
+
+
+_LINK = re.compile(r"\[([^\]]+)\]\((\d+)\)")
+# A link that names where tainted data comes from ("depends on [library input](2)",
+# "injected from [...]", "copied from [source](1)", "on a [user-provided value]")
+# is a taint *source*: data-flow information that belongs to the trace block.
+_SOURCE_BEFORE = re.compile(r"(?:depends on|injected from|copied from|from|on an?|but an?|"
+                            r"an unsanitized)\s*$", re.IGNORECASE)
+_SOURCE_LABEL = re.compile(r"input|user-provided|user controlled|untrusted|argument|"
+                           r"environment", re.IGNORECASE)
+
+
+def render_references(finding: Finding, reader: SourceReader | None = None) -> str:
+    """Code of the locations the message links to, minus those on the taint trace.
+
+    CodeQL messages name locations as links, e.g. "This [regular expression](1)
+    that depends on [library input](2) ...". For ReDoS the regex is often defined
+    far from the sink (a module-level constant), so without this the model judges
+    a regex it never saw (4.10 rehearsal: fresh, tough-cookie). Data-flow
+    information is left out: locations that are steps of a code flow and links that
+    name a taint source. They belong to the trace block, so the no-trace condition
+    of 5.3 does not get them through here.
+    """
+    on_trace = {(s.file, s.start_line) for flow in finding.code_flows for s in flow}
+    out, seen = [], set()
+    for m in _LINK.finditer(finding.message):
+        label, num = m.group(1), m.group(2)
+        loc = finding.related.get(int(num))
+        if (loc is None or (loc.file, loc.start_line) in on_trace | seen
+                or _SOURCE_BEFORE.search(finding.message[:m.start()])
+                or _SOURCE_LABEL.search(label)):
+            continue
+        seen.add((loc.file, loc.start_line))
+        code = reader.snippet(loc.file, loc.start_line, loc.start_line) if reader else None
+        out.append(f"  ({num}) {label}: {loc.file}:{loc.start_line}"
+                   + (f"\n        {code.strip()}" if code else ""))
+    return ("Locations referenced by the message:\n" + "\n".join(out)) if out else ""
 
 
 def render_context(finding: Finding, reader: SourceReader | None = None,
@@ -53,6 +92,9 @@ def render_context(finding: Finding, reader: SourceReader | None = None,
         snippet = reader.snippet(finding.file, finding.start_line, finding.end_line)
     if snippet:
         parts.append(f"Flagged code:\n{snippet}")
+    refs = render_references(finding, reader)
+    if refs:
+        parts.append(refs)
     if with_trace:
         trace = render_trace(finding, reader)
         if trace:

@@ -87,7 +87,7 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 | 4.7 | Bucle reflexivo: hasta 3 intentos, con el motivo del rechazo como feedback | **hecho** — `repair_loop.py` |
 | 4.8 | Implementación de los oráculos de D9 (preregistro + ejecutores) | **hecho** — `oracle_juiceshop.py`, `oracle_secbench.py`: Juice Shop (3), exploit SecBench (30), T1 (17), T2 (13) |
 | 4.9 | Etiquetado y escalado de PRs | **hecho** — `publish.py`; `triage_engine.py` encadena triaje → bucle → publicación |
-| 4.10 | Ensayo de punta a punta sobre los 33 casos | **en curso** — `run_dataset.py` y objetivos preregistrados listos; falta la ejecución real |
+| 4.10 | Ensayo de punta a punta sobre los 33 casos | **hecho** — `run_dataset.py`; 2 ensayos: 4 fallos del agente corregidos tras el primero; el segundo, 19 ACCEPTED, 11 ESCALATED, 3 NOT_TP |
 
 ## Aislamiento con worktrees (4.1)
 
@@ -673,8 +673,13 @@ en la misma línea o el mismo flujo marcado en varias líneas). La correspondenc
 caso → hallazgo se fija antes de cualquier parche en
 [`benchmarks/remediation-targets.csv`](../../benchmarks/remediation-targets.csv)
 (`scripts/benchmarks/remediation_targets.py`), con una regla determinista: CodeQL
-con traza en la ventana de ±10 líneas de C7, regla aceptada por C7 para el caso, el
-más cercano al *sink* y, en caso de empate, por regla y fingerprint. Regenerado con
+con traza en la ventana de ±10 líneas de C7 y regla aceptada por C7 para el caso.
+Entre esos, gana primero una regla cuyo origen sea la entrada del paquete, frente a
+las que modelan el entorno o la línea de comandos
+(`js/shell-command-injection-from-environment`,
+`js/indirect-command-line-injection`); después, el más cercano al *sink*; si hay
+empate, por regla y fingerprint. La preferencia por el origen se añadió tras el
+primer ensayo (ver abajo). Regenerado con
 el SARIF de CI de `84ce0be` y el de `1e6ca25`, sale idéntico: los fingerprints no
 dependen de la línea. En SecBench, los demás hallazgos de la ventana siguen en el
 código, pero el exploit comprueba la vulnerabilidad completa.
@@ -717,6 +722,125 @@ tiempos, además del texto que se habría publicado. Validación offline (Groq y
 verificador simulados, SARIF y log reales): 19 comprobaciones, incluidas la parada
 por cuota a mitad de lote y a mitad de bucle, la reanudación sin llamadas repetidas,
 el informe reconstruido sin llamadas y `--policy`.
+
+### Primer ensayo (18-11-2026) y correcciones
+
+Ejecución real con zero-shot, traza y RAG: 32 de 33 casos en 61 min, 190K tokens
+(123K de entrada y 67K de salida; ~$0,06 a precio de lista). Es casi la cuota diaria
+del plan gratuito. CodeQL ocupó ~30 min de rescans.
+
+| Resultado | Casos |
+|---|---|
+| ACCEPTED | 17 (intento 1: 8, intento 2: 5, intento 3: 4) |
+| ESCALATED | 7 |
+| NOT_TP (el triaje dijo FP) | 8 |
+| Interrumpido (JS-03) | 1 |
+
+El bucle reflexivo aportó: 9 de los 17 aceptados necesitaron el feedback de un
+intento rechazado. Los oráculos de D9 rechazaron parches que CodeQL daba por
+buenos. En macaddress el exploit siguió funcionando en los 3 intentos con CodeQL en
+FIXED. En pixl-class, async-git, react-dev-utils y JS-02, el parche rompía la
+funcionalidad (T2 o tests de API).
+
+El ensayo destapó cuatro fallos del agente, no del modelo. Están corregidos y el
+ensayo se repitió con un log nuevo (siguiente sección):
+
+1. **Un parche que impide cargar el código paraba el lote (JS-03).** Si el código
+   parcheado no compila o lanza al importarse, `node --test` informa de un único
+   fallo con el nombre del fichero y sin el texto del error, y el oráculo de Juice
+   Shop lo trataba como un fallo de infraestructura. Ahora cuenta como fallo
+   funcional, con el error de compilación o de carga sacado de la consola (se añade
+   el reporter `spec` a stdout) como feedback para el modelo. Probado con un error
+   de sintaxis y con un `throw` al cargar.
+2. **Objetivo mal elegido en 4 casos de inyección de comandos.** En
+   connection-tester, dns-sync y giting, el hallazgo elegido era el de
+   `js/shell-command-injection-from-environment`, cuya traza empieza en
+   `process.execPath` o `process.cwd()`. No es el vector del CVE, y el triaje
+   acertó al llamarlo FP. En bestzip, el elegido empezaba en `process.argv` (la
+   CLI), mientras que el exploit ataca la API. Con la preferencia por el origen del
+   paquete, los cuatro pasan a `js/shell-command-constructed-from-input`, con origen
+   en la entrada de la función (`host`, `hostname`, `opts`, `options`). Solo
+   portprocesses conserva un origen en `process.argv`, porque es el único hallazgo de
+   su ventana. Queda como limitación.
+3. **La regex de ReDoS no llegaba al prompt.** En fresh y tough-cookie la regex es
+   una constante del módulo, fuera de la función que muestra el RAG, y el modelo
+   opinó sobre regex "típicas" sin verlas. CodeQL sí la señala en los
+   `relatedLocations` (enlaces del mensaje: "This [regular expression](1) …").
+   `sarif_parser` los guarda ahora en `Finding.related` y `trace_context` añade un
+   bloque "Locations referenced by the message" con la línea de código de cada
+   enlace. Para que la condición sin traza (5.3) no reciba información de flujo por
+   esta vía, se omiten las ubicaciones que son pasos de la traza y los enlaces que
+   nombran un origen ("depends on [library input]", "injected from …"). En los 33
+   objetivos el bloque aparece en 11 casos: la regex en 5 de ReDoS, la llamada a
+   la shell en 5 de inyección de comandos y "interpreted as code" en underscore.
+4. **El 38% de los intentos no se pudo aplicar (20 de 52).** Clasificados uno a uno:
+   en 5 el modelo copió los números de línea del prompt (`33:   settings = …`), en 5
+   cambió la indentación (espacios en lugar de tabuladores, o un desplazamiento de
+   1–2 espacios) y en 10 el contenido no existía (líneas omitidas, `require (` por
+   `require(`, una regex reescrita, un cuerpo de función inventado). El aplicador
+   tolera ahora los dos primeros tipos, como `git apply --ignore-whitespace` o el
+   *fuzz* de `patch`. Prueba en orden: literal; líneas en blanco sin el espacio
+   inicial; sin los prefijos `NN: ` (si todas las líneas viejas los llevan);
+   comparando líneas sin indentación, si el bloque encaja en **un único** sitio. Las
+   líneas añadidas se reindentan al estilo del fichero (tabuladores o espacios, con
+   el desplazamiento más frecuente) y las de contexto conservan las del fichero. El
+   contenido nunca se adivina: los 10 errores de contenido siguen fallando. Cada
+   aplicación deja el modo en el log (`[mode=exact|lineno|whitespace]`) y el informe
+   cuenta los hunks que necesitaron tolerancia. Al reaplicar los 52 diffs del
+   ensayo, 10 de los 20 fallidos se aplican y los 32 que ya se aplicaban siguen en
+   modo exacto. Validación offline: 8 comprobaciones (reindentado a tabuladores,
+   desplazamiento con anidamiento, token cambiado, línea omitida y coincidencia
+   ambigua rechazados).
+
+Lo que es del modelo se queda como resultado: juzga mal ReDoS aunque vea la regex
+(forwarded `/ *, */`, color-string, hosted-git-info) y comete errores de contenido
+en los diffs.
+
+### Segundo ensayo, con las correcciones (19-11-2026)
+
+Misma condición, con un log nuevo (`results/dev/rehearsal-4.10b.jsonl`). Los 33
+casos se completaron en dos tandas: la cuota diaria se agotó al llegar a JS-03 y se
+relanzó el mismo comando. Fueron 215K tokens (138K de entrada y 77K de salida;
+~$0,07), 254 s de LLM y 100 min de rescans: CodeQL sigue siendo el cuello de
+botella.
+
+| | 1.er ensayo | 2.º ensayo |
+|---|---|---|
+| ACCEPTED | 17 (#1: 8, #2: 5, #3: 4) | **19** (#1: 14, #2: 3, #3: 2) |
+| ESCALATED | 7 | 11 |
+| NOT_TP (el triaje dijo FP) | 8 | **3** |
+| Intentos con diff no aplicable | 20 de 52 (38%) | **8 de 59 (14%)** |
+
+- **Triaje.** Los falsos negativos bajan de 8 a 3. Tres desaparecen por la
+  corrección del objetivo (connection-tester, dns-sync y giting pasan a TP) y dos
+  porque la regex ya llega al prompt (color-string y tough-cookie). Siguen en FP
+  forwarded, fresh y hosted-git-info. En fresh el modelo ve `/ *, */` y aun así lo
+  considera lineal: es un error del modelo.
+- **Aplicación.** De los 65 hunks aplicados, 31 encajaron literalmente, 14
+  necesitaron quitar números de línea y 20 tolerar espacios en blanco. La mitad de
+  los parches del modelo dependen de esa tolerancia, y conviene declararlo. Los 8
+  fallos que quedan son de contenido; por ejemplo, en serve-here.js el modelo
+  parchea `response.js`, un fichero que no es el del hallazgo, con líneas que no
+  existen.
+- **Oráculo de carga, en real.** En JS-03, el intento 2 no compilaba. El modelo
+  recibió `ERROR: Expected ":" but found "}"` como feedback y el intento 3 se
+  aceptó.
+- **CodeQL detectó una regresión de seguridad.** En giting, los 3 parches pasaban a
+  `execFile` con argumentos del usuario y CodeQL los marcó como NEW
+  (`js/second-order-command-line-injection`, inyección de opciones en `git`): el
+  caso se escaló correctamente.
+- **CodeQL y el exploit discrepan en las dos direcciones.** En 7 intentos, CodeQL
+  seguía marcando el hallazgo aunque el exploit ya no funcionaba y los tests
+  funcionales pasaban (guardas de prototype pollution que CodeQL no reconoce;
+  json-ptr, libnested, set-value, is-email). En 6, CodeQL lo daba por arreglado y el
+  exploit seguía funcionando (macaddress, portprocesses, madlib). El criterio de D9
+  exige las dos cosas. El log guarda ambas señales, así que la Fase 5 puede dar la
+  RSR estricta y también la de cada oráculo por separado.
+- **Variabilidad del modelo.** Con temperatura 0, en casos que ninguna corrección
+  tocaba el resultado cambia entre ensayos: set-value y portprocesses pasan de
+  ACCEPTED a ESCALATED, y pixl-class, hoek y tinyserver2 se aceptan antes. El modelo
+  no es determinista, y una única pasada por condición mezcla el efecto de la
+  estrategia con ese ruido. Es una decisión de diseño para la Fase 5.
 
 ## Uso de `regression.py`
 

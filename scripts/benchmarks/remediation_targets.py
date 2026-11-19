@@ -11,7 +11,13 @@ choice has to be fixed once, before any patch, by a deterministic rule:
 2. for SecBench.js, only the rules C7 accepted for the case (``codeql_sink_rules``
    of ``benchmarks/secbench-js/detection.csv``, i.e. a CWE of the vulnerability
    class);
-3. the closest one to the sink line; ties by rule id, then fingerprint.
+3. rules whose taint source is the package's own input before rules that model
+   the process environment or command line (``ENVIRONMENT_RULES``): SecBench's
+   exploits attack the package through its API, so a finding whose trace starts
+   at ``process.execPath`` / ``process.cwd()`` / ``process.argv`` is not the CVE's
+   vector (the 4.10 rehearsal picked such findings for connection-tester,
+   dns-sync, giting and bestzip, and the triage rightly called three of them FP);
+4. the closest one to the sink line; ties by rule id, then fingerprint.
 
 The other findings in the window are counted in ``near_sink`` (they stay in the
 code; for SecBench the exploit oracle still checks the vulnerability as a whole).
@@ -45,6 +51,10 @@ DATASET = REPO / "benchmarks" / "dataset.csv"
 DETECTION = REPO / "benchmarks" / "secbench-js" / "detection.csv"
 TARGETS = REPO / "benchmarks" / "remediation-targets.csv"
 WINDOW = 10
+# CodeQL rules whose sources are the process environment / command line, not the
+# package's API input (see rule 3 of the docstring).
+ENVIRONMENT_RULES = {"js/shell-command-injection-from-environment",
+                     "js/indirect-command-line-injection"}
 FIELDS = ["id", "source", "fingerprint", "rule", "file", "line", "sink_line", "cvss",
           "auto_remediable", "near_sink"]
 
@@ -62,7 +72,8 @@ def select(sarif: Path) -> list[dict]:
                 and (not allowed or f.rule_id in allowed)}
         if not near:
             raise SystemExit(f"{case['id']}: no traced CodeQL finding near the sink")
-        f = min(near.values(), key=lambda f: (abs(f.start_line - sink), f.rule_id, f.label_key))
+        f = min(near.values(), key=lambda f: (f.rule_id in ENVIRONMENT_RULES,
+                                              abs(f.start_line - sink), f.rule_id, f.label_key))
         rows.append({"id": case["id"], "source": case["source"], "fingerprint": f.label_key,
                      "rule": f.rule_id, "file": f.file, "line": f.start_line, "sink_line": sink,
                      "cvss": f.security_severity, "auto_remediable": score(f).auto_remediable,

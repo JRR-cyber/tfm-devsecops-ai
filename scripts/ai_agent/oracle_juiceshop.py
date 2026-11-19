@@ -30,6 +30,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -92,15 +93,24 @@ def unlink(link: Path) -> None:
         os.unlink(link) if link.is_symlink() else os.rmdir(link)
 
 
-def run_tests(tree: Path, test_file: str) -> dict[str, str]:
-    """Run one API test file in ``tree``; return {test name: pass | fail | skip}."""
+def run_tests(tree: Path, test_file: str) -> tuple[dict[str, str], str]:
+    """Run one API test file in ``tree``.
+
+    Returns ({test name: pass | fail | skip}, console output). The output is kept
+    because a file that fails to *load* (the patched code does not compile or throws
+    at import) appears in the JUnit report only as one failing entry named after the
+    file, with no error text: the error itself is only on the console.
+    """
     app = tree / JUICE_SHOP
     with tempfile.TemporaryDirectory() as tmp:
         report = Path(tmp) / "junit.xml"
         cmd = ["node", "--import", "./test/api/helpers/test-env.mjs", "--import", "tsx",
                "--test", "--test-force-exit", "--test-reporter=junit",
-               f"--test-reporter-destination={report}", test_file]
-        subprocess.run(cmd, cwd=app, capture_output=True, text=True, timeout=TIMEOUT)
+               f"--test-reporter-destination={report}",
+               "--test-reporter=spec", "--test-reporter-destination=stdout", test_file]
+        proc = subprocess.run(cmd, cwd=app, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=TIMEOUT)
+        output = proc.stdout + "\n" + proc.stderr
         if not report.is_file():
             raise RuntimeError(f"no test report for {test_file} (the test run crashed)")
         results: dict[str, str] = {}
@@ -114,12 +124,39 @@ def run_tests(tree: Path, test_file: str) -> dict[str, str]:
             # Node's junit reporter escapes names twice (" -> &amp;quot;), so the
             # parsed attribute still holds "&quot;": undo the second layer.
             results[html.unescape(case.get("name", ""))] = state
-        return results
+        return results, output
 
 
-def evaluate(spec: dict, results: dict[str, str], seconds: float) -> list[CheckResult]:
+_ERROR_LINE = re.compile(r"\bERROR:|^\w*Error\b|\.(?:ts|js):\d+(?::\d+)?$")
+
+
+def load_error(output: str, tree: Path) -> str:
+    """The compile / load error of a test run, with worktree paths made repo-relative."""
+    seen: dict[str, None] = {}
+    for line in output.splitlines():
+        line = line.strip()
+        if line and not line.startswith("at ") and _ERROR_LINE.search(line):
+            seen.setdefault(line, None)
+    text = " | ".join(seen)
+    for prefix in (str(tree) + os.sep, str(tree).replace("\\", "/") + "/"):
+        text = text.replace(prefix, "")
+    return text[:500]
+
+
+def evaluate(spec: dict, results: dict[str, str], seconds: float, output: str = "",
+             tree: Path | None = None) -> list[CheckResult]:
     """Turn per-test results into the functional and exploit checks."""
     missing = [n for n in spec["tests"] if n not in results]
+    if missing and len(missing) == len(spec["tests"]) and "fail" in results.values():
+        # No registered test ran and the file itself failed: the patched code does
+        # not load (syntax/type error, throw at import). A patch outcome, not infra.
+        err = load_error(output, tree) if tree else ""
+        return [CheckResult("juice-shop-functional", False,
+                            f"the patched code does not load, so none of the {len(spec['tests'])} "
+                            f"API tests of {spec['test_file']} could run: "
+                            f"{err or 'no error message captured'}", seconds),
+                CheckResult("juice-shop-exploit", False,
+                            "not evaluable: the patched code does not load", 0.0)]
     if missing:   # registry and test file disagree: an oracle bug, not a patch outcome
         raise RuntimeError(f"pre-registered tests not found in the report: {missing}")
     broken = [n for n, k in spec["tests"].items() if k == FUNCTIONAL and results.get(n) != "pass"]
@@ -148,8 +185,8 @@ def check_tree(tree: Path, target_file: str, repo_root: Path) -> list[CheckResul
     links = link_dependencies(tree, repo_root)
     try:
         start = time.monotonic()
-        results = run_tests(tree, spec["test_file"])
-        return evaluate(spec, results, round(time.monotonic() - start, 1))
+        results, output = run_tests(tree, spec["test_file"])
+        return evaluate(spec, results, round(time.monotonic() - start, 1), output, tree)
     finally:
         for link in links:
             unlink(link)

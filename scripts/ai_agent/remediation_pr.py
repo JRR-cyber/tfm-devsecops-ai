@@ -40,17 +40,23 @@ class ApplyResult:
     changed: dict[str, str] = field(default_factory=dict)   # path -> new content
 
 
-def parse_diff(diff: str) -> tuple[str | None, list[tuple[str, str]]]:
-    """Return (file path, [(old_block, new_block), ...]) from a unified diff."""
+Op = tuple[str, str]          # (" " context | "-" removed | "+" added, line text)
+
+
+def parse_ops(diff: str, blank_as_context: bool = False) -> tuple[str | None, list[list[Op]]]:
+    """Return (file path, hunks), each hunk its lines as (op, text) in diff order.
+
+    ``blank_as_context`` reads an empty line inside a hunk as a blank context line
+    (models often drop the leading space of blank context lines).
+    """
     path: str | None = None
-    hunks: list[tuple[str, str]] = []
-    old: list[str] = []
-    new: list[str] = []
+    hunks: list[list[Op]] = []
+    ops: list[Op] = []
     in_hunk = False
 
     def flush() -> None:
-        if in_hunk and (old or new):
-            hunks.append(("\n".join(old), "\n".join(new)))
+        if in_hunk and ops:
+            hunks.append(ops)
 
     for line in diff.splitlines():
         if line.startswith("+++ "):
@@ -59,21 +65,116 @@ def parse_diff(diff: str) -> tuple[str | None, list[tuple[str, str]]]:
             continue
         elif line.startswith("@@"):
             flush()
-            old, new, in_hunk = [], [], True
+            ops, in_hunk = [], True
         elif in_hunk:
-            if line.startswith("-"):
-                old.append(line[1:])
-            elif line.startswith("+"):
-                new.append(line[1:])
-            elif line.startswith(" "):
-                old.append(line[1:])
-                new.append(line[1:])
+            if line[:1] in ("-", "+", " "):
+                ops.append((line[:1], line[1:]))
+            elif blank_as_context and line == "":
+                ops.append((" ", ""))
     flush()
-    return path, hunks
+    if blank_as_context:      # trailing blank context lines are an artefact of the reply
+        for h in hunks:
+            while h and h[-1] == (" ", ""):
+                h.pop()
+    return path, [h for h in hunks if h]
+
+
+def _blocks(ops: list[Op]) -> tuple[str, str]:
+    return ("\n".join(t for o, t in ops if o != "+"), "\n".join(t for o, t in ops if o != "-"))
+
+
+def parse_diff(diff: str, blank_as_context: bool = False) -> tuple[str | None, list[tuple[str, str]]]:
+    """Return (file path, [(old_block, new_block), ...]) from a unified diff."""
+    path, hunks = parse_ops(diff, blank_as_context)
+    return path, [_blocks(h) for h in hunks]
+
+
+_LINENO = re.compile(r"^\d+: ?")
+_LEAD = re.compile(r"^[ \t]*")
+EXACT, LINENO, WHITESPACE = "exact", "lineno", "whitespace"
+
+
+def _strip_linenos(ops: list[Op]) -> list[Op] | None:
+    """Drop the ``NN: `` prefixes the prompt shows (``context_rag``) and the model
+    sometimes copies; only if every non-blank old/context line carries one."""
+    if not all(_LINENO.match(t) for o, t in ops if o != "+" and t.strip()):
+        return None
+    return [(o, _LINENO.sub("", t, count=1)) for o, t in ops]
+
+
+def _width(lead: str, unit: int) -> int:
+    return lead.count(" ") + lead.count("\t") * unit
+
+
+def _indent_unit(leads: list[str]) -> int:
+    """Indentation step of a block (smallest positive difference), default 2."""
+    widths = sorted({_width(l, 4) for l in leads})
+    steps = [b - a for a, b in zip(widths, widths[1:]) if b > a]
+    return min(steps) if steps else 2
+
+
+def _match_ignoring_indent(text: str, ops: list[Op]) -> tuple[str | None, str]:
+    """Apply a hunk comparing lines without leading/trailing whitespace.
+
+    The old lines (context + removed) must match exactly one place in the file
+    (else no change and the reason). Context lines keep the file's own text. Added
+    lines are re-indented in the file's style: the model's indentation shifted by
+    the most common model -> file offset of the aligned old lines (in indentation
+    levels, and as tabs when the file indents with tabs), so a single odd line
+    (e.g. a comment at column 0) does not skew the rest.
+    """
+    from collections import Counter
+
+    file_lines = text.split("\n")
+    old = [t for o, t in ops if o != "+"]
+    key = lambda s: s.strip()
+    n = len(old)
+    hits = [i for i in range(len(file_lines) - n + 1)
+            if all(key(file_lines[i + k]) == key(old[k]) for k in range(n))]
+    if len(hits) != 1:
+        return None, "not found" if not hits else f"ambiguous ({len(hits)} places)"
+    start = hits[0]
+    # model lead -> file lead, from the aligned old lines (blank lines carry no indent)
+    pairs = [(_LEAD.match(t).group(), _LEAD.match(file_lines[start + k]).group())
+             for k, t in enumerate(old) if t.strip()]
+    if not pairs:
+        return None, "old block is blank"
+    unit_m = _indent_unit([m for m, _ in pairs] +
+                          [_LEAD.match(t).group() for o, t in ops if o == "+" and t.strip()])
+    file_tabs = any("\t" in f for _, f in pairs)
+    if file_tabs:     # offsets in indentation levels (model unit -> one tab)
+        offset = Counter(f.count("\t") - round(_width(m, unit_m) / unit_m)
+                         for m, f in pairs).most_common(1)[0][0]
+    else:             # offsets in spaces
+        offset = Counter(len(f) - _width(m, unit_m) for m, f in pairs).most_common(1)[0][0]
+    out, k = [], 0                                   # k: index into the matched old lines
+    for o, t in ops:
+        if o == " ":                                 # context: the file's own line
+            out.append(file_lines[start + k])
+            k += 1
+        elif o == "-":
+            k += 1
+        elif not t.strip():
+            out.append("")
+        else:
+            w = _width(_LEAD.match(t).group(), unit_m)
+            out.append(("\t" * max(0, round(w / unit_m) + offset) if file_tabs
+                        else " " * max(0, w + offset)) + t.strip())
+    return "\n".join(file_lines[:start] + out + file_lines[start + n:]), ""
 
 
 def apply_by_content(diff: str, repo_root: Path) -> ApplyResult:
-    """Apply each hunk by locating its old block verbatim and replacing it."""
+    """Apply each hunk by locating its old block and replacing it.
+
+    Each hunk is tried, in order, (1) verbatim; (2) reading blank lines without the
+    leading space as blank context; (3) without the ``NN: `` line-number prefixes of
+    the prompt, if every old line carries one; (4) comparing lines without their
+    indentation, if the old block then matches exactly **one** place (the added
+    lines are re-indented in the file's style). Content is never fuzzed: a changed
+    token, a skipped line or reordered lines still fail. The detail says which mode
+    each hunk needed (``[mode=...]``), so the 4.10 / Phase 5 logs can report how
+    many patches relied on the tolerance.
+    """
     # The remediation prompt asks for a single-file diff; a multi-file one would
     # be parsed under one path and misapplied, so reject it explicitly.
     if len(re.findall(r"^\+\+\+ ", diff, re.MULTILINE)) > 1:
@@ -89,11 +190,38 @@ def apply_by_content(diff: str, repo_root: Path) -> ApplyResult:
         return ApplyResult(False, f"target not in repo: {path}")
 
     text = target.read_text(encoding="utf-8")
-    for old_block, new_block in hunks:
-        if old_block and old_block not in text:
-            return ApplyResult(False, f"old block not found verbatim in {path}")
-        text = text.replace(old_block, new_block, 1) if old_block else text + new_block
-    return ApplyResult(True, f"applied {len(hunks)} hunk(s) to {path}", {path: text})
+    _, loose = parse_ops(diff, blank_as_context=True)
+    modes = []
+    for i, (old_block, new_block) in enumerate(hunks):
+        if not old_block:                            # pure addition at the end
+            text += new_block
+            modes.append(EXACT)
+            continue
+        if old_block in text:
+            text = text.replace(old_block, new_block, 1)
+            modes.append(EXACT)
+            continue
+        ops = loose[i] if i < len(loose) else []
+        old_l, new_l = _blocks(ops)
+        if ops and old_l in text:                    # only blank context lines differed
+            text = text.replace(old_l, new_l, 1)
+            modes.append(WHITESPACE)
+            continue
+        stripped = _strip_linenos(ops) if ops else None
+        if stripped is not None:
+            old_s, new_s = _blocks(stripped)
+            if old_s in text:
+                text = text.replace(old_s, new_s, 1)
+                modes.append(LINENO)
+                continue
+        replaced, why = _match_ignoring_indent(text, stripped or ops) if ops else (None, "empty")
+        if replaced is None:
+            return ApplyResult(False, f"old block of hunk {i + 1} not found in {path} "
+                                      f"(also ignoring indentation: {why})")
+        text = replaced
+        modes.append(f"{LINENO}+{WHITESPACE}" if stripped is not None else WHITESPACE)
+    mode = "exact" if all(m == EXACT for m in modes) else ",".join(modes)
+    return ApplyResult(True, f"applied {len(hunks)} hunk(s) to {path} [mode={mode}]", {path: text})
 
 
 def branch_name(finding: Finding) -> str:

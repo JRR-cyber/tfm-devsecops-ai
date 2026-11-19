@@ -177,7 +177,15 @@ def report(rows: list[Row], args, log_path: Path, note: str = "") -> str:
     counts = Counter(r.outcome for r in rows)
     accepted_at = Counter(len(r.attempts) for r in rows if r.outcome == "ACCEPTED")
     cost = totals[0] / 1e6 * PRICE_INPUT_PER_M + totals[1] / 1e6 * PRICE_OUTPUT_PER_M
+    attempts = [a for r in rows for a in r.attempts]
+    applied = [a for a in attempts if "[mode=" in (a.get("apply_detail") or "")]
+    tolerant = Counter(m for a in applied
+                       for m in a["apply_detail"].split("[mode=")[1].rstrip("]").split(",")
+                       if m != "exact")
     lines += ["", "## Totales", "",
+              f"- Intentos: {len(attempts)}; diff no aplicable {sum(a.get('status') == 'APPLY_FAILED' for a in attempts)}; "
+              f"aplicados con tolerancia (hunks): " +
+              (", ".join(f"{k} {v}" for k, v in sorted(tolerant.items())) or "ninguno"),
               "- Resultados: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())),
               "- Aceptados en el intento: " + (", ".join(f"#{k}: {v}" for k, v in
                                                        sorted(accepted_at.items())) or "—"),
