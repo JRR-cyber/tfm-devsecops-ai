@@ -1,0 +1,70 @@
+{
+  "_doc": "Pre-registered functional/security oracle for the 3 Juice Shop remediation cases (decision D9, docs/benchmark/decisions.md). Fixed before any Phase 5 patch exists. Each test of the route's own API test file is classified: 'functional' tests must keep passing after a patch (functional regression oracle); 'vuln' tests assert that the target vulnerability is exploitable, so a correct fix must make them fail (dynamic security oracle). Every test passed on the unpatched base when this file was written.",
+  "juice_shop_version": "v20.2.0 (upstream 1618a611b173b4bf114028e6e02549950606e29d)",
+  "registered": "2026-11-16",
+  "base_validation": "all 41 tests pass on the unpatched base (Node 24, in-memory DB); 1 test is skipped upstream (it.skip) and excluded",
+  "cases": {
+    "src/app/juice-shop/routes/login.ts": {
+      "dataset_id": "JS-01",
+      "test_file": "test/api/login.test.ts",
+      "tests": {
+        "POST login newly created user": "functional",
+        "POST login non-existing user": "functional",
+        "POST login without credentials": "functional",
+        "POST login with admin credentials": "functional",
+        "POST login with support-team credentials": "functional",
+        "POST login with MC SafeSearch credentials": "functional",
+        "POST login with Amy credentials": "functional",
+        "POST login with wurstbrot credentials expects 2FA token": "functional",
+        "POST login as bjoern.kimminich@gmail.com with known password": "functional",
+        "POST login with WHERE-clause disabling SQL injection attack": "vuln",
+        "POST login with known email \"admin@juice-sh.op\" in SQL injection attack": "vuln",
+        "POST login with known email \"jim@juice-sh.op\" in SQL injection attack": "vuln",
+        "POST login with known email \"bender@juice-sh.op\" in SQL injection attack": "vuln",
+        "POST login with non-existing email \"acc0unt4nt@juice-sh.op\" via UNION SELECT injection attack": "vuln",
+        "POST login with query-breaking SQL Injection attack": "functional",
+        "GET last login IP will be saved as True-Client-IP header value": "functional",
+        "GET last login IP will be saved as remote IP when True-Client-IP is not present": "functional",
+        "GET last login IP returns 401 Unauthorized when no token is provided": "functional"
+      },
+      "notes": "'query-breaking SQL Injection attack' expects 401 for the input \"';\": a malformed login must still be rejected after the fix, so it is functional."
+    },
+    "src/app/juice-shop/routes/search.ts": {
+      "dataset_id": "JS-02",
+      "test_file": "test/api/search.test.ts",
+      "tests": {
+        "GET product search with no matches returns no products": "functional",
+        "GET product search with one match returns found product": "functional",
+        "GET product search fails with error message that exposes ins SQL Injection vulnerability": "vuln",
+        "GET product search SQL Injection fails from two missing closing parenthesis": "vuln",
+        "GET product search SQL Injection fails from one missing closing parenthesis": "vuln",
+        "GET product search SQL Injection fails for SELECT * FROM attack due to wrong number of returned columns": "vuln",
+        "GET product search can create UNION SELECT with Users table and fixed columns": "vuln",
+        "GET product search can create UNION SELECT with Users table and required columns": "vuln",
+        "GET product search can create UNION SELECT with sqlite_master table and required column": "vuln",
+        "GET product search cannot select logically deleted christmas special by default": "functional",
+        "GET product search by description cannot select logically deleted christmas special due to forced early where-clause termination": "functional",
+        "GET product search can select logically deleted christmas special by forcibly commenting out the remainder of where clause": "vuln",
+        "GET product search can select logically deleted unsafe product by forcibly commenting out the remainder of where clause": "vuln",
+        "GET product search with empty search parameter returns all products": "functional",
+        "GET product search without search parameter returns all products": "functional"
+      },
+      "notes": "The four 'SQL Injection fails ...' tests assert a 500 with the SQLITE_ERROR text, i.e. that the input reaches the SQL parser: they are vulnerability tests even though their names say 'fails'."
+    },
+    "src/app/juice-shop/routes/updateProductReviews.ts": {
+      "dataset_id": "JS-03",
+      "test_file": "test/api/product-review.test.ts",
+      "tests": {
+        "GET product reviews by product id": "functional",
+        "GET product reviews attack by injecting a mongoDB sleep command": "functional",
+        "PUT single product review can be created": "functional",
+        "PATCH single product review can be edited": "functional",
+        "PATCH single product review editing need an authenticated user": "functional",
+        "POST non-existing product review cannot be liked": "functional",
+        "POST single product review can be liked": "functional",
+        "PATCH multiple product review via injection": "vuln"
+      },
+      "notes": "The mongoDB sleep test exercises a different vulnerability in another route (showProductReviews.ts); a single-file patch to updateProductReviews.ts must not change it, so it is functional for this case."
+    }
+  }
+}
