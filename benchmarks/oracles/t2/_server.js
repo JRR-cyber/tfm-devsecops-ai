@@ -18,11 +18,17 @@ const FILES = {
   'data/items.json': '{"items": [1, 2, 3]}\n',
 };
 
+// The path stays fixed (not mkdtemp) so both runs see the same paths in any
+// response. It is created private: the top directory non-recursively with 0700,
+// so it fails with EEXIST if someone recreated it after the rm (no symlink or
+// pre-planted directory is followed), and the files 0600 (CodeQL
+// js/insecure-temporary-file).
 function makeSite() {
   fs.rmSync(SITE, { recursive: true, force: true });
+  fs.mkdirSync(SITE, { mode: 0o700 });
   for (const [rel, content] of Object.entries(FILES)) {
-    fs.mkdirSync(path.dirname(path.join(SITE, rel)), { recursive: true });
-    fs.writeFileSync(path.join(SITE, rel), content);
+    fs.mkdirSync(path.dirname(path.join(SITE, rel)), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(SITE, rel), content, { mode: 0o600 });
   }
 }
 
