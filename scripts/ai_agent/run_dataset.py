@@ -23,9 +23,13 @@ what is done. When Groq says the quota is spent (``GroqQuotaExhausted``) the run
 writes the report so far, prints when to resume and exits with code 75. Any other
 failure (CodeQL, Docker) stops the run the same way, without logging the attempt.
 
-Preflight (before any token is spent): GROQ_API_KEY, CodeQL CLI, Docker and the
-SecBench harness image, the Juice Shop build the oracle links in, and every target
-fingerprint present in the SARIF.
+Preflight (before any token is spent): the provider's API key (``LLM_PROVIDER``,
+default Groq), CodeQL CLI, Docker and the SecBench harness image, the Juice Shop
+build the oracle links in, and every target fingerprint present in the SARIF.
+
+Paid provider: ``LLM_BUDGET_USD`` is required. It caps the list-price spend of the
+whole log (a relaunch counts what the log already spent); when reached, the run
+stops before the next call, writes the report and exits with code 76.
 
 Usage (Git Bash, from the repo root; needs GROQ_API_KEY, CODEQL_CLI, Docker):
     python scripts/ai_agent/run_dataset.py <unified findings.sarif> \
@@ -52,6 +56,7 @@ TARGETS = Path("benchmarks/remediation-targets.csv")
 JUICE_SHOP_BUILD = ("src/app/juice-shop/node_modules", "src/app/juice-shop/build",
                     "src/app/juice-shop/frontend/dist")
 EXIT_RESUME_LATER = 75                     # EX_TEMPFAIL: relaunch the same command later
+EXIT_BUDGET = 76                           # spend cap reached: check the spend first
 
 
 @dataclass
@@ -99,8 +104,20 @@ def preflight(repo_root: Path, cases: list[Case], oracles: bool, codeql: str | N
     missing = [c.id for c in cases if c.finding is None]
     if missing:
         problems.append(f"targets not in this SARIF (wrong artifact?): {', '.join(missing)}")
-    if not os.environ.get("GROQ_API_KEY"):
-        problems.append("GROQ_API_KEY is not set in this terminal")
+    from groq_client import (BUDGET_ENV, budget_setting, current_provider, max_tokens_setting,
+                             reasoning_effort)
+    try:
+        provider = current_provider()
+        reasoning_effort()
+        max_tokens_setting()
+        if not os.environ.get(provider.key_env):
+            problems.append(f"{provider.key_env} is not set in this terminal "
+                            f"(provider {provider.name})")
+        if provider.name != "groq" and budget_setting() is None:
+            problems.append(f"{BUDGET_ENV} is not set: a paid provider ({provider.name}) needs "
+                            "a spend cap in USD for this run, e.g. export LLM_BUDGET_USD=1")
+    except ValueError as err:
+        problems.append(str(err))
     try:
         cli = find_codeql(codeql)
     except Exception as err:               # noqa: BLE001 - reported with the rest
@@ -156,8 +173,12 @@ def report(rows: list[Row], args, log_path: Path, note: str = "") -> str:
             f"RAG {'sí' if not args.no_rag else 'no'}, "
             f"{'filtro CVSS ≥ 7' if args.policy else 'todos los casos'}"
             f"{', sin puerta de triaje' if args.repair_all else ''}")
+    served = sorted({f"{rec.get('provider', 'groq')} (reasoning_effort "
+                     f"{rec.get('reasoning_effort', 'provider-default')})"
+                     for r in rows for rec in ([r.triage] if r.triage else []) + r.attempts})
     lines = [f"# Ensayo sobre el dataset de remediación", "",
-             f"- Condición: {cond}", f"- Log: `{log_path}`",
+             f"- Condición: {cond}", f"- Proveedor: {', '.join(served) or '—'}",
+             f"- Log: `{log_path}`",
              f"- Generado: {time.strftime('%Y-%m-%d %H:%M')}"]
     if note:
         lines += ["", f"> {note}"]
@@ -255,7 +276,8 @@ def main() -> None:
                         help="rebuild the report from the log; no LLM call, no rescan")
     args = parser.parse_args()
 
-    from groq_client import GroqClient, GroqQuotaExhausted, format_wait
+    from groq_client import (GroqClient, GroqQuotaExhausted, LLMBudgetExceeded,
+                             current_provider, format_wait)
     from repair_loop import oracle_checks
     from rescan import codeql_version
     from results import ResultLog, environment
@@ -287,7 +309,14 @@ def main() -> None:
 
     cli = preflight(repo_root, cases, not args.no_oracles, args.codeql)
     log = ResultLog(args.log, environment(repo_root, codeql_version(cli)))
-    client = GroqClient()
+    # the spend cap covers the whole log: a relaunch starts from what it already spent
+    provider = current_provider()
+    spent = sum(provider.cost(r.get("prompt_tokens") or 0, r.get("completion_tokens") or 0)
+                for r in log.records() if r.get("provider", "groq") == provider.name)
+    client = GroqClient(spent=spent)
+    if getattr(client, "budget", None) is not None:
+        print(f"spend cap ${client.budget:.2f} ({provider.name}); already spent in this log "
+              f"~${spent:.4f} at list price", flush=True)
     checks = None if args.no_oracles else oracle_checks(repo_root)
     rows: list[Row] = []
     note, code = "", 0
@@ -303,9 +332,14 @@ def main() -> None:
                   + (f" {row.labels}" if row.labels else ""), flush=True)
     except GroqQuotaExhausted as err:
         wait = f"en ~{format_wait(err.wait_seconds)}" if err.wait_seconds else "más tarde"
-        note = (f"Interrumpido en {cases[len(rows)].id}: cuota de Groq agotada. "
+        note = (f"Interrumpido en {cases[len(rows)].id}: cuota de "
+                f"{current_provider().name.capitalize()} agotada. "
                 f"Relanzar el mismo comando {wait}; el log evita repetir lo hecho.")
         code = EXIT_RESUME_LATER
+    except LLMBudgetExceeded as err:
+        note = (f"Interrumpido en {cases[len(rows)].id}: tope de gasto alcanzado ({err}). "
+                "Revisar el gasto antes de subir LLM_BUDGET_USD y relanzar.")
+        code = EXIT_BUDGET
     except KeyboardInterrupt:
         note, code = f"Interrumpido a mano en {cases[len(rows)].id}.", 130
     except Exception as err:               # infra: CodeQL, Docker... (attempt not logged)
