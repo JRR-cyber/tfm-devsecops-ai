@@ -2,6 +2,101 @@
 
 Decisiones de diseño del conjunto experimental, con su motivo y su fecha. Alimenta el capítulo de gestión de proyecto de la memoria (Fase 6). La más reciente arriba.
 
+## D12 — Protocolo de la Fase 5: rejilla completa, 3 pasadas, todo en Together (2026-11-25)
+
+> **Aprobada por el autor el 25-11-2026.** Se congela con el tag `phase5-protocol` cuando esté implementada la preparación (5.0). Hasta entonces se puede ajustar sin coste, porque no existe ningún dato de la Fase 5.
+
+**Contexto.** La rejilla completa de la Fase 5, con 3 pasadas de remediación, necesita del orden de 5–7M tokens. En el plan gratuito de Groq (200K/día) serían más de 3 semanas, y el plan Developer no se puede contratar: el 22-11-2026, el soporte de Groq respondió que las altas están pausadas y sin fecha. Tres semanas expuestos a un cambio de límites o a la retirada del modelo, como la de Llama 3.3 en agosto, ponen en riesgo el diseño *within-subject*. Se evaluó servir el mismo modelo de pesos abiertos desde Together AI con un piloto con criterios fijados antes de la primera llamada ([`piloto-proveedor.md`](piloto-proveedor.md)): 4 pasadas de los 33 casos, 2 en Groq y 2 en Together. **Se cumplieron C1–C6**: entrada idéntica salvo un desfase constante de plantilla, el acuerdo entre proveedores dentro del ruido de cada uno, el mismo formato, el mismo nivel de razonamiento y el coste del panel igual al estimado.
+
+**Decisión.**
+
+1. **Proveedor y modelo.**
+   - Toda la Fase 5 se ejecuta en Together AI (*serverless*) con `openai/gpt-oss-120b`, con estos parámetros fijos:
+     - `reasoning_effort=medium`, `temperature=0`, `max_tokens=16384`;
+     - timeout de 180 s;
+     - tope de gasto propio por log (`LLM_BUDGET_USD`), además del prepago.
+   - **Nunca se mezclan proveedores.** Los ensayos del 4.10 y el piloto en Groq son desarrollo y no entran en el análisis.
+   - **Si el modelo servido cambia a mitad** (`model_served` distinto, o aviso de retirada o actualización de Together), se paran las ejecuciones y se repite entero el experimento afectado. Si Together retira el modelo, se repite el piloto con DeepInfra con los mismos criterios.
+   - Es una desviación del roadmap («Groq API») en la infraestructura, no en el modelo, que es la constante del diseño.
+
+2. **Experimento de triaje.**
+   - **Conjunto:** 83 hallazgos, las 53 filas de `labels.csv` más los 30 objetivos de SecBench.js, que son TP con exploit. Los 3 de Juice Shop ya están en `labels.csv`.
+   - **Unidad de análisis:** la vulnerabilidad (`vuln_group`), como en [`dataset.md`](dataset.md): **77 grupos**, con 47 TP, 22 FP y 8 UNCERTAIN.
+     - El agente triaja las 83 filas, como haría en producción.
+     - Un grupo cuenta como «TP según el agente» si lo es **cualquiera** de sus filas. Es lo que haría el pipeline, que mandaría a remediar ese grupo.
+     - Solo 5 grupos tienen más de una fila.
+   - **Rejilla:** 3 estrategias (zero-shot, few-shot, CoT) × 3 contextos, es decir, 9 celdas y 747 llamadas por pasada. Los contextos son:
+     - *completo*: traza + RAG, el agente de producción;
+     - *ciego*: sin traza, con RAG; es el control del paso 5.3;
+     - *sin RAG*: traza sin RAG.
+   - **Pasadas: 3.** Cada pasada cuesta unos $0,4 y una hora, sin CodeQL.
+   - Si el agente responde UNCERTAIN, cuenta como «no TP», igual que en producción.
+
+3. **Experimento de remediación.**
+   - **Conjunto:** los 33 casos (D11), con `--repair-all`: se repara cada caso sin depender del veredicto del triaje.
+   - **Rejilla:** 3 estrategias × traza sí/no, es decir, 6 condiciones. El RAG va siempre activo, porque sin el código no se puede parchear.
+   - **Pasadas: 3**, con un máximo de **3 intentos** del bucle reflexivo por caso, en todas las condiciones y pasadas (regla fija del proyecto).
+   - **Few-shot de remediación con 3 ejemplos sintéticos** (inyección SQL, inyección de comandos y path traversal), ninguno sacado del dataset. Ahora tiene uno solo, de SQLi, pero 30 de los 33 casos son de otras clases: con un ejemplo, la condición mediría ese ejemplo y no la estrategia. El few-shot de triaje se queda como está, con 2 ejemplos sintéticos (TP y FP).
+
+4. **Métricas.**
+   - **Triaje.** Todas se calculan por condición y por pasada:
+     - *acierto*: veredicto igual a la etiqueta, sobre los 69 grupos TP + FP;
+     - *FPR*: grupos FP que el agente llama TP, sobre 22;
+     - *TPR*: grupos TP que el agente llama TP, sobre 47;
+     - *UNCERTAIN*: se informan aparte, con análisis de sensibilidad contándolos como TP y como FP;
+     - *estabilidad entre pasadas*: κ de Fleiss.
+   - **Remediación.**
+     - *RSR* = ACCEPTED/33, por pasada y en media. Se desglosa por los subconjuntos CodeQL ≥ 7 (12) y NVD ≥ 7 (24) de D11, y por nivel de oráculo (Juice Shop, T1, T2) de D9.
+     - *Convergencia*: en qué intento se acepta.
+     - *Regresión*: fallo funcional o hallazgo NEW en parches que CodeQL da por FIXED.
+     - *Desacuerdo* entre CodeQL y el exploit.
+     - *Overhead*: tokens, segundos de LLM, de rescan y de oráculos.
+     - *RSR de punta a punta*, con el triaje de la misma ejecución como filtro: métrica secundaria.
+
+5. **Análisis estadístico.** Se escribe y se prueba con datos simulados antes de la primera llamada.
+   - **Puntuación por unidad:** la proporción de las 3 pasadas en que acierta (triaje) o se acepta (remediación): 0, ⅓, ⅔ o 1. Así la variabilidad del modelo entra en el diseño en vez de quedar como ruido.
+   - **Preguntas de investigación.** El TFM se plantea con preguntas, no con hipótesis formales. Cada pregunta se responde con un contraste estadístico, con α = 0,05 y corrección de Holm dentro de cada pregunta. En términos estadísticos, cada prueba contrasta la hipótesis nula de «no hay diferencia».
+     - **PI1. ¿La traza de taint mejora el triaje?** Completo frente a ciego, en acierto, con Wilcoxon de rangos con signo para cada estrategia. Es la pregunta central.
+     - **PI2. ¿Qué estrategia de prompting triaja mejor?** Friedman entre las 3 estrategias en el contexto completo y, si es significativo, Wilcoxon dos a dos.
+     - **PI3. ¿Qué estrategia de prompting remedia mejor?** Friedman entre las 3 estrategias con traza y, si es significativo, Wilcoxon dos a dos.
+     - **PI4. ¿La traza mejora la remediación?** Con frente a sin traza, con Wilcoxon para cada estrategia.
+     - **PI5. ¿El RAG mejora el triaje?** Completo frente a sin RAG, con Wilcoxon para cada estrategia. La interacción entre RAG y estrategia se describe, sin contraste.
+   - **Componentes:** FPR y TPR se contrastan como secundarios, con las mismas pruebas sobre los grupos FP y TP.
+   - **Tamaños de efecto:**
+     - W de Kendall para Friedman;
+     - correlación biserial de rangos para Wilcoxon;
+     - diferencia de proporciones con IC del 95 % por *bootstrap* sobre las unidades.
+   - **Sensibilidad:** se repiten las pruebas solo con la pasada 1, binaria, con Q de Cochran y McNemar exacto. Si la conclusión cambia, se informa.
+   - **Control de memorización (5.3), exploratorio:** acierto en la condición ciega de Juice Shop, conocido públicamente, frente a SecBench.js, con paquetes poco conocidos. Se informa de forma descriptiva y con Mann-Whitney. En remediación, Juice Shop solo aporta 3 casos.
+
+6. **Ejecución.**
+   - **Orden:** las tres pasadas de triaje y después las tres de remediación.
+   - **Orden intercalado dentro de cada pasada:** cada bloque de casos recorre todas las condiciones, en un orden aleatorio con semilla fija (20261125). Así ni la hora ni el día quedan confundidos con la condición.
+   - **Logs versionados:**
+     - ruta `experiments/phase5/<experimento>-p<pasada>.jsonl`, porque `.gitignore` ignora `results/`;
+     - se commitean al terminar cada tanda;
+     - cada fila lleva la pasada, el proveedor, el modelo servido y `agent_commit`.
+   - **Congelación:** todo se ejecuta desde el commit con el tag `phase5-protocol`. Un cambio del agente después de congelar obliga a repetir enteras las condiciones afectadas y se declara.
+   - **Fallos de infraestructura** (Docker, CodeQL, red): el intento no se registra y se retoma desde el log, como en el piloto.
+   - **Coste estimado:** unos $3 en total, sobre un saldo de $14,77. Duración: unas 30 h de CodeQL en la máquina local, la mayor parte en la remediación.
+
+**Motivo.** El proveedor es la única forma de ejecutar la rejilla completa con 3 pasadas en el calendario de las semanas 7–8 sin exponer el diseño a semanas de cambios en Groq. El piloto muestra que el cambio de infraestructura no se distingue del ruido propio del modelo. Las 3 pasadas convierten esa variabilidad en un dato por unidad en lugar de un error de medida, y las pruebas de Friedman y Wilcoxon sobre esas proporciones son las del roadmap. Fijar todo antes de la primera llamada evita ajustar el análisis a los resultados.
+
+**Consecuencia.**
+- **Preparación pendiente (paso 5.0), antes de congelar:**
+  - ejecutor de triaje sobre los 83 hallazgos, con log y reanudación;
+  - campo de pasada en `RunKey`;
+  - los 3 ejemplos sintéticos de remediación;
+  - orden intercalado con semilla;
+  - script de análisis probado con datos simulados;
+  - incorporar a `main` el soporte de proveedor de la rama `exp/proveedor-piloto`.
+- **Documentación al adoptar D12:** `CLAUDE.md` y `scripts/ai_agent/README.md` («Decisión de modelo»), donde dice «Groq API».
+- **Amenazas a la validez:**
+  - el proveedor no es el del roadmap;
+  - el *overhead* absoluto es el de Together, que tarda unas 2,7 veces más por llamada que Groq en el piloto;
+  - los ejemplos de few-shot cubren 3 de las clases del dataset, y se informa por clase;
+  - los términos de Together (§4c) prohíben el *benchmarking*. Se interpreta que la Fase 5 evalúa estrategias de prompting de un modelo, no al proveedor. Es una lectura del autor, sin consulta a Together.
+
 ## D11 — La RSR se mide sobre los 33 casos; el umbral CVSS ≥ 7 es política del pipeline, no criterio del experimento (2026-11-18)
 
 **Contexto.** Al preparar el ensayo del 4.10 se fijó el hallazgo objetivo de cada caso ([`remediation-targets.csv`](../../benchmarks/remediation-targets.csv)). Resultado: solo **12 de los 33 casos** pasan el filtro de auto-remediación del roadmap (CVSS ≥ 7.0, paso 3.3). Pasan los 3 de Juice Shop (8.8), los 3 de path traversal y los 6 de ReDoS (7.5). Quedan por debajo las 12 inyecciones de comandos (6.3), las 7 contaminaciones de prototipo y las 2 inyecciones de código (6.1). La causa es que la única severidad que el pipeline tiene de un hallazgo SAST es el `security-severity` de CodeQL, que es **un número por regla**: todos los hallazgos de `js/shell-command-constructed-from-input` valen 6.3, sea cual sea el paquete. CodeQL no puede saber más. Ve un patrón en el código, no un CVE, y en un uso real un hallazgo en código propio no tiene CVE: el CVSS de NVD solo existe aquí porque el dataset se construyó con vulnerabilidades ya publicadas.
