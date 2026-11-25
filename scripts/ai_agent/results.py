@@ -10,7 +10,8 @@ Each line carries:
 
 - the **key** that identifies the attempt — ``kind`` (triage | remediation),
   ``fingerprint`` (label_key), ``strategy``, ``with_trace``, ``with_rag``,
-  ``attempt`` — used for resuming and never duplicated;
+  ``attempt`` and ``rep`` (the pass of the Phase 5 experiment, D12; 1 in every
+  earlier log) — used for resuming and never duplicated;
 - the **outcome** — triage verdict, or patch status (FIXED / NOT_FIXED /
   APPLY_FAILED / NO_DIFF) with NEW / RELOCATED / PERSISTING counts from 4.3/4.4,
   the extra oracle checks, and (4.7) whether the reflexive loop ``accepted`` the
@@ -39,7 +40,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 2   # 2 (4.7): accepted / feedback / max_attempts / checks
+SCHEMA_VERSION = 3   # 2 (4.7): accepted / feedback / max_attempts / checks; 3 (5.0): rep
 TRIAGE, REMEDIATION = "triage", "remediation"
 NO_DIFF, APPLY_FAILED = "NO_DIFF", "APPLY_FAILED"
 
@@ -59,15 +60,18 @@ class RunKey:
     with_trace: bool
     with_rag: bool
     attempt: int = 1    # 1..3 for remediation (reflexive loop); 1 for triage
+    rep: int = 1        # pass of the experiment (D12: 1..3); logs before 5.0 have none
 
     @classmethod
     def from_record(cls, rec: dict) -> "RunKey":
         return cls(rec["kind"], rec["fingerprint"], rec["strategy"],
-                   bool(rec["with_trace"]), bool(rec["with_rag"]), int(rec.get("attempt", 1)))
+                   bool(rec["with_trace"]), bool(rec["with_rag"]), int(rec.get("attempt", 1)),
+                   int(rec.get("rep", 1)))
 
 
-def environment(repo_root: Path | None = None, codeql_version: str | None = None) -> dict:
-    """Provenance fields stamped on every line of a run."""
+def environment(repo_root: Path | None = None, codeql_version: str | None = None,
+                **extra) -> dict:
+    """Provenance fields stamped on every line of a run (``extra``: e.g. the input SARIF hash)."""
     from groq_client import budget_setting, current_provider, max_tokens_setting, reasoning_effort
 
     commit = None
@@ -80,7 +84,7 @@ def environment(repo_root: Path | None = None, codeql_version: str | None = None
             "reasoning_effort": reasoning_effort() or "provider-default",
             "max_tokens": max_tokens_setting(), "budget_usd": budget_setting(),
             "codeql_version": codeql_version,
-            "agent_commit": commit, "python": platform.python_version()}
+            "agent_commit": commit, "python": platform.python_version(), **extra}
 
 
 class ResultLog:
@@ -210,11 +214,12 @@ def summary(records: list[dict]) -> str:
 
 
 def loops(records: list[dict]) -> dict[tuple, list[dict]]:
-    """Remediation attempts grouped by loop (finding x condition), in attempt order."""
+    """Remediation attempts grouped by loop (finding x condition x pass), in attempt order."""
     out: dict[tuple, list[dict]] = defaultdict(list)
     for r in records:
         if r["kind"] == REMEDIATION and "accepted" in r:
-            out[(r["fingerprint"], r["strategy"], r["with_trace"], r["with_rag"])].append(r)
+            out[(r["fingerprint"], r["strategy"], r["with_trace"], r["with_rag"],
+                 r.get("rep", 1))].append(r)
     return {k: sorted(v, key=lambda r: r["attempt"]) for k, v in out.items()}
 
 

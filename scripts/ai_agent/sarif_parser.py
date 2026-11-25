@@ -240,8 +240,15 @@ def _related(result: dict) -> dict[int, CodeFlowStep]:
 
 
 def parse_sarif(path: Path, repo_root: Path | None = None) -> list[Finding]:
-    """Read the unified SARIF and return one Finding per result, all runs flattened."""
-    sarif = json.loads(Path(path).read_text(encoding="utf-8"))
+    """Read the unified SARIF and return one Finding per result, all runs flattened.
+
+    A ``.gz`` path is read compressed (the Phase 5 input is versioned that way).
+    """
+    raw = Path(path).read_bytes()
+    if Path(path).suffix == ".gz":
+        import gzip
+        raw = gzip.decompress(raw)
+    sarif = json.loads(raw.decode("utf-8"))
     reader = SourceReader(repo_root)
     findings: list[Finding] = []
 
@@ -273,6 +280,30 @@ def parse_sarif(path: Path, repo_root: Path | None = None) -> list[Finding]:
                 related=_related(result),
             ))
     return findings
+
+
+def pick_occurrence(findings: list[Finding], fingerprint: str,
+                    line: int | str | None = None) -> Finding | None:
+    """The finding a dataset row (bare digest + line) refers to.
+
+    A digest can occur more than once in the SARIF (``digest:0``, ``digest:1``...):
+    the context hash is line-independent, so CodeQL alerts on similar code, or the
+    same sink reached by two flows, share it. The dataset CSVs record the line of the
+    finding they mean, so the occurrence on that line wins; among several on the same
+    line (or without a line), the lowest occurrence index. Deterministic, so every
+    condition and pass of Phase 5 sends the model the same finding (D12).
+    """
+    hits = [f for f in findings if f.label_key == fingerprint]
+    if line not in (None, ""):
+        on_line = [f for f in hits if f.start_line == int(line)]
+        hits = on_line or hits
+    if not hits:
+        return None
+
+    def occurrence(f: Finding) -> int:
+        tail = f.fingerprint.partition(":")[2]
+        return int(tail) if tail.isdigit() else 0
+    return min(hits, key=occurrence)
 
 
 def _summary(findings: list[Finding]) -> str:
