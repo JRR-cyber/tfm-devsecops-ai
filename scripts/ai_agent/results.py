@@ -68,14 +68,18 @@ class RunKey:
 
 def environment(repo_root: Path | None = None, codeql_version: str | None = None) -> dict:
     """Provenance fields stamped on every line of a run."""
-    from groq_client import MODEL
+    from groq_client import budget_setting, current_provider, max_tokens_setting, reasoning_effort
 
     commit = None
     if repo_root is not None:
         res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_root,
                              text=True, capture_output=True)
         commit = res.stdout.strip() or None
-    return {"model_requested": MODEL, "codeql_version": codeql_version,
+    provider = current_provider()
+    return {"model_requested": provider.model, "provider": provider.name,
+            "reasoning_effort": reasoning_effort() or "provider-default",
+            "max_tokens": max_tokens_setting(), "budget_usd": budget_setting(),
+            "codeql_version": codeql_version,
             "agent_commit": commit, "python": platform.python_version()}
 
 
@@ -143,6 +147,9 @@ def _finding_fields(finding) -> dict:
 
 def _usage_fields(usage) -> dict:
     return {"prompt_tokens": usage.prompt_tokens, "completion_tokens": usage.completion_tokens,
+            "cached_tokens": getattr(usage, "cached_tokens", None),
+            "reasoning_tokens": getattr(usage, "reasoning_tokens", None),
+            "finish_reason": getattr(usage, "finish_reason", None),
             "llm_seconds": usage.seconds, "model_served": usage.model}
 
 
