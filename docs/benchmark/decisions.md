@@ -23,8 +23,10 @@ Decisiones de diseño del conjunto experimental, con su motivo y su fecha. Alime
    - **Conjunto:** 83 hallazgos, las 53 filas de `labels.csv` más los 30 objetivos de SecBench.js, que son TP con exploit. Los 3 de Juice Shop ya están en `labels.csv`.
    - **Unidad de análisis:** la vulnerabilidad (`vuln_group`), como en [`dataset.md`](dataset.md): **77 grupos**, con 47 TP, 22 FP y 8 UNCERTAIN.
      - El agente triaja las 83 filas, como haría en producción.
-     - Un grupo cuenta como «TP según el agente» si lo es **cualquiera** de sus filas. Es lo que haría el pipeline, que mandaría a remediar ese grupo.
-     - Solo 5 grupos tienen más de una fila.
+     - Solo 5 grupos tienen más de una fila: 2 TP (con 3 y 2 filas) y 3 FP (con 2 filas cada uno).
+     - **En las pruebas estadísticas**, cada grupo puntúa con la proporción de sus filas que el agente acierta. Así cada vulnerabilidad pesa una vez, no se pierde información y no hace falta una regla de agregación arbitraria.
+     - **La FPR y la TPR «de producción»** usan la regla del pipeline: el grupo cuenta como TP si lo es cualquiera de sus filas, porque el pipeline lo mandaría a remediar. Se informan de forma descriptiva.
+     - **Sensibilidad:** se repiten las pruebas por fila (83).
    - **Rejilla:** 3 estrategias (zero-shot, few-shot, CoT) × 3 contextos, es decir, 9 celdas y 747 llamadas por pasada. Los contextos son:
      - *completo*: traza + RAG, el agente de producción;
      - *ciego*: sin traza, con RAG; es el control del paso 5.3;
@@ -54,7 +56,10 @@ Decisiones de diseño del conjunto experimental, con su motivo y su fecha. Alime
      - *RSR de punta a punta*, con el triaje de la misma ejecución como filtro: métrica secundaria.
 
 5. **Análisis estadístico.** Se escribe y se prueba con datos simulados antes de la primera llamada.
-   - **Puntuación por unidad:** la proporción de las 3 pasadas en que acierta (triaje) o se acepta (remediación): 0, ⅓, ⅔ o 1. Así la variabilidad del modelo entra en el diseño en vez de quedar como ruido.
+   - **Puntuación por unidad:** la proporción de aciertos en las 3 pasadas.
+     - En triaje, sobre filas × pasadas del grupo; en un grupo de una sola fila, 0, ⅓, ⅔ o 1.
+     - En remediación, la proporción de pasadas en que el caso se acepta.
+     - Así la variabilidad del modelo entra en el diseño en vez de quedar como ruido.
    - **Preguntas de investigación.** El TFM se plantea con preguntas, no con hipótesis formales. Cada pregunta se responde con un contraste estadístico, con α = 0,05 y corrección de Holm dentro de cada pregunta. En términos estadísticos, cada prueba contrasta la hipótesis nula de «no hay diferencia».
      - **PI1. ¿La traza de taint mejora el triaje?** Completo frente a ciego, en acierto, con Wilcoxon de rangos con signo para cada estrategia. Es la pregunta central.
      - **PI2. ¿Qué estrategia de prompting triaja mejor?** Friedman entre las 3 estrategias en el contexto completo y, si es significativo, Wilcoxon dos a dos.
