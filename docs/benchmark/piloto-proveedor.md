@@ -45,7 +45,7 @@ Comprobadas en el catálogo de modelos, la referencia de la API, la documentaci�
 - `reasoning_effort` acepta low/medium/high, con `medium` por defecto. Los valores no válidos se aceptan sin error; nuestro cliente los valida antes de enviarlos.
 - `temperature` admite valores de 0 a 1.
 - La respuesta llega en `content` y el razonamiento en un campo aparte.
-- `usage` solo informa `prompt_tokens` y `completion_tokens`.
+- Según la referencia de la API, `usage` solo informa `prompt_tokens` y `completion_tokens`. **Corregido tras pagar:** las respuestas reales también incluyen los tokens de razonamiento y los de caché (ver «Resultados»).
 - El valor por defecto de `max_tokens` **no está documentado**. Por eso se fija explícitamente (ver más abajo).
 
 **Datos**
@@ -123,6 +123,63 @@ C1–C5 los evalúa `pilot_compare.py` con estos mismos umbrales, que están esc
 
 - **Se cumplen C1–C6:** se propone D12 con toda la Fase 5 en Together: rejilla completa, 3 pasadas de remediación y 3 intentos por caso. Los ensayos en Groq quedan como desarrollo. La Fase 5 se ejecuta entera en un único proveedor.
 - **Falla alguno:** se analiza el porqué en los casos que discrepan. Las salidas son dos: piloto con DeepInfra, o Fase 5 en el plan gratuito de Groq por bloques de prioridad (unas 3 semanas).
+
+## Resultados
+
+### Sonda de `reasoning_effort` (23-11-2026)
+
+Comando: `groq_client.py --probe-effort --repeats 3`, una pregunta corta de triaje que exige algo de razonamiento. Media de tokens de salida por llamada (entre paréntesis, los de razonamiento):
+
+| Nivel | Groq | Together | Together / Groq |
+|---|---|---|---|
+| omitido | 557 (546) | 378 (367) | 0,68 |
+| low | 109 (98) | 112 (101) | 1,03 |
+| **medium** | **429 (418)** | **450 (439)** | **1,05** |
+| high | 5.522 (5.511) | 2.989 (2.978) | 0,54 |
+
+- **Con `medium`, el nivel fijado para el piloto y la Fase 5, los dos proveedores razonan lo mismo** (razón 1,05). Con `low`, también.
+- **Por defecto, Groq aplica algo equivalente a `medium`.** Sin el parámetro, sus 557 tokens quedan mucho más cerca de medium que de low o high. Los ensayos del 4.10, que no lo enviaban, se hicieron con un razonamiento comparable. Together, sin el parámetro, también cae en la franja de medium, como documenta.
+- **Con `high` divergen casi ×2.** No afecta al diseño, que fija `medium`. Con 3 repeticiones no se concluye nada más. Sí confirma que hacía falta un `max_tokens` explícito: Groq dedicó unos 5.500 tokens a una pregunta trivial.
+- **Respuestas:** las 24 llamadas responden UNSAFE.
+- **Sin cortes:** el *selftest* de Together termina con `finish_reason=stop`.
+- **Datos de uso:** Together informa los tokens de razonamiento y los de caché, aunque su referencia de API no lo indica. En el *selftest*, 69 de los 91 tokens de prompt salieron de caché. Sin precio de caché, el coste no cambia.
+- **Coste a precio de lista:** Together, unos $0,0074 entre *selftest* y sonda; Groq, unos $0,0122 (plan gratuito, no se cobra).
+
+### Pasadas (23 al 25-11-2026)
+
+Informe completo: `pilot_compare.py` sobre los cuatro logs del diseño, en `results/dev/pilot-report.md`.
+
+| Ejecución | ACCEPTED | Triaje FP | Fallos de formato | Cortadas por `max_tokens` | Mediana tokens salida (triaje) | LLM s (mediana) | Coste a precio de lista |
+|---|---|---|---|---|---|---|---|
+| groq-1 | 20 | 4 | 1 | 0 | 397 | 2,0 | $0,073 |
+| groq-2 | 22 | 6 | 1 | 0 | 345 | 1,9 | $0,069 |
+| together-1 | 23 | 5 | 0 | 0 | 407 | 5,7 | $0,076 |
+| together-2 | 22 | 4 | 1 | 0 | 415 | 5,2 | $0,077 |
+
+| | Resultado | Umbral |
+|---|---|---|
+| C1 | **Cumple.** Desfase constante de −1 token en el 100 % de las 66 llamadas comparables de cada par Groq–Together; 0 dentro de cada proveedor. Modelo servido `openai/gpt-oss-120b` en las 391 llamadas. | ≥ 95 % a ±2 |
+| C2 | **Cumple.** Veredictos iguales: dentro de Groq 29, dentro de Together 30, entre ambos 30,5 de 33. | ≥ 27 |
+| C3 | **Cumple.** ACCEPTED medio: Groq 21, Together 22,5. Resultado igual por caso: dentro de Groq 29, dentro de Together 28, entre ambos 28,5. | ±3; ≥ 26 |
+| C4 | **Cumple.** Fallos de formato medios: Groq 1, Together 0,5. | ≤ 3 |
+| C5 | **Cumple.** Mediana de tokens de salida por triaje: Groq 371, Together 411 (×1,11). | ×0,5–×2 |
+
+- **Together se parece a Groq tanto como cada proveedor a sí mismo.** El acuerdo entre proveedores (30,5 y 28,5) queda entre los dos acuerdos internos, en triaje y en remediación.
+- **Los fallos de formato son del modelo, no del proveedor.** Por ejemplo, Groq escribió `"confidence": 0. nine` en el triaje de bestzip, y el parser recuperó el veredicto. Ninguna de las 391 respuestas se cortó por `max_tokens`.
+- **Latencia:** Together tarda unas 2,7 veces más por llamada. No afecta a la validez si toda la Fase 5 va en un único proveedor. Pero el *overhead* absoluto que mida la Fase 5 será el de ese proveedor.
+
+**Incidencias.** Ninguna se debió a Together.
+- **Docker Desktop se bloqueó** en la pasada together-1. El contenedor del oráculo se quedó en *Created* hasta el timeout de 600 s. Se reinició el equipo y se retomó desde el log; la llamada de remediación perdida costó unos $0,0005 y no consta en el log.
+- **Tras el reinicio, la clave de API se pegó con un carácter de control.** Together respondió 401 y el preflight no lo detectó porque la variable no estaba vacía. Se repitió la carga de la clave. No hubo coste.
+- **En groq-1 hubo dos paradas por cuota de Groq** (código 75) y un fallo de DNS de la red local. Las tres se retomaron desde el log.
+- **Pasada extra de Together.** La que debía ser groq-2 se lanzó por error con `LLM_PROVIDER=together`: 99 llamadas, todas a Together según el log. Se renombró `pilot-together-3.jsonl` y se repitió groq-2 contra Groq. La evaluación usa los cuatro logs del diseño; together-3 no entra en los criterios, para no elegir pasadas a la vista de los resultados. Como observación, sus acuerdos con las otras pasadas son 31–32 en triaje y 27–30 en remediación, en el mismo rango, con 21 ACCEPTED.
+
+**C6, revisado a mano.**
+- **Estabilidad:** ningún fallo de Together bloqueó un lote.
+- **Coste:** el saldo del panel tras together-1 era $14,92, igual que el estimado ($15 − $0,0074 − $0,0763). Al terminar, el panel marcaba **$14,77**, igual que el estimado a precio de lista: $15 menos unos $0,23 de tres pasadas y las sondas. El contador propio de gasto es fiable para la Fase 5.
+- **Datos:** el 25-11-2026 se comprobaron de nuevo los interruptores de privacidad: siguen apagados.
+
+**Veredicto: C1–C6 se cumplen.** Según la regla fijada arriba, se propone D12 con toda la Fase 5 en Together.
 
 ## Limitaciones
 
