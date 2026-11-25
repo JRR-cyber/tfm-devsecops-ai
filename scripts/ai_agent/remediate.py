@@ -56,7 +56,12 @@ RETRY_HEADER = (
 )
 RETRY_FOOTER = "\n\nReturn a new unified diff that addresses this feedback."
 
-# Fixed few-shot exemplar for remediation (used only by the few-shot strategy).
+# Fixed few-shot exemplars for remediation (used only by the few-shot strategy).
+# D12: three synthetic cases of different classes (SQL injection, command
+# injection, path traversal), none taken from the dataset, so few-shot is judged
+# as a strategy and not as one SQL example. They carry no taint trace, so the
+# no-trace condition gets no data-flow information through them; the context
+# lines are verbatim, as the applier needs.
 REMEDIATE_EXAMPLES: list[tuple[str, str]] = [
     (
         "Rule: js/sql-injection\nLocation: routes/item.ts:12\n"
@@ -64,6 +69,38 @@ REMEDIATE_EXAMPLES: list[tuple[str, str]] = [
         "```diff\n--- a/routes/item.ts\n+++ b/routes/item.ts\n@@\n"
         "-  db.query('SELECT * FROM items WHERE id = ' + req.query.id)\n"
         "+  db.query('SELECT * FROM items WHERE id = ?', [req.query.id])\n```",
+    ),
+    (
+        "Rule: js/command-line-injection\nLocation: lib/net.js:4\n"
+        "Flagged code:\n  exec('ping -c 1 ' + host, cb)\n"
+        "Surrounding code:\n"
+        "  const { exec } = require('child_process')\n"
+        "  function ping(host, cb) {\n"
+        "    exec('ping -c 1 ' + host, cb)\n"
+        "  }",
+        "```diff\n--- a/lib/net.js\n+++ b/lib/net.js\n@@\n"
+        "-const { exec } = require('child_process')\n"
+        "+const { execFile } = require('child_process')\n"
+        " function ping(host, cb) {\n"
+        "-  exec('ping -c 1 ' + host, cb)\n"
+        "+  execFile('ping', ['-c', '1', String(host)], cb)\n"
+        " }\n```",
+    ),
+    (
+        "Rule: js/path-injection\nLocation: server/files.js:5\n"
+        "Flagged code:\n  fs.readFile(path.join(ROOT, req.params.name), cb)\n"
+        "Surrounding code:\n"
+        "  const ROOT = path.resolve('uploads')\n"
+        "  function download(req, cb) {\n"
+        "    fs.readFile(path.join(ROOT, req.params.name), cb)\n"
+        "  }",
+        "```diff\n--- a/server/files.js\n+++ b/server/files.js\n@@\n"
+        " function download(req, cb) {\n"
+        "-  fs.readFile(path.join(ROOT, req.params.name), cb)\n"
+        "+  const file = path.resolve(ROOT, String(req.params.name))\n"
+        "+  if (!file.startsWith(ROOT + path.sep)) return cb(new Error('invalid path'))\n"
+        "+  fs.readFile(file, cb)\n"
+        " }\n```",
     ),
 ]
 

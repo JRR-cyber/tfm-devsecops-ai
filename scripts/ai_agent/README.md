@@ -1,17 +1,29 @@
-# Agente de IA (Fases 3–4)
+# Agente de IA (Fases 3–5)
 
 Agente híbrido del pipeline: lee el SARIF unificado que produce CI
 (`scripts/pipeline/unify_results.py` → `unified/findings.sarif`), triaje cada
 hallazgo apoyándose en la traza de taint de CodeQL y, para los de severidad alta,
 propone un parche y abre un PR para revisión humana (postura asistiva).
 
-Diseño fijo del roadmap (no sustituir sin pedirlo): un solo modelo en Groq
-(ver "Decisión de modelo" abajo), los experimentos comparan *estrategias de
-prompting* (zero-shot / few-shot / CoT); auto-remediación solo para CVSS ≥ 7.0;
+Diseño fijo del roadmap (no sustituir sin pedirlo): un solo modelo,
+`openai/gpt-oss-120b`, servido por Together AI en toda la Fase 5 (ver "Decisión de
+modelo" abajo y D12); los experimentos comparan *estrategias de prompting*
+(zero-shot / few-shot / CoT); auto-remediación solo para CVSS ≥ 7.0;
 emparejamiento pre/post parche por `partialFingerprints`, nunca por línea; el
 agente no corre en `pull_request_target`.
 
 ## Decisión de modelo
+
+**Proveedor de la Fase 5: Together AI (D12, 25-11-2026).** El plan Developer de
+Groq no se puede contratar (altas pausadas sin fecha), y la Fase 5 completa no cabe
+en el plan gratuito sin semanas de exposición a cambios de Groq. Un piloto con
+criterios fijados antes de pagar ([`piloto-proveedor.md`](../../docs/benchmark/piloto-proveedor.md))
+mostró que el **mismo modelo** servido por Together no se distingue del servido por
+Groq más allá del ruido propio del modelo (C1–C6). Toda la Fase 5 se ejecuta en
+Together con `reasoning_effort=medium`, `temperature=0` y `max_tokens=16384`; nunca
+se mezclan proveedores. El cliente sigue usando Groq por defecto (sin
+`LLM_PROVIDER`); los ensayos del 4.10 y el piloto en Groq son desarrollo. Lo que
+sigue es la historia de la elección del modelo, que no cambia.
 
 **Modelo único fijado: `openai/gpt-oss-120b` en Groq.** El roadmap fijaba
 *Llama 3.3 70B en Groq*, pero **Groq retiró ese modelo el 16-08-2026** (y toda la
@@ -36,7 +48,7 @@ pago *Developer*. Pagar no los recupera, así que la elección se mantiene.
 `gpt-oss-120b` en el plan Developer: $0,15 / $0,60 por millón de tokens de
 entrada/salida, 250K tokens/min y 1K peticiones/min.
 
-**Plan de pago.** Para el ensayo del 4.10 y la Fase 5 se usará el plan Developer
+**Plan de pago** (superado por D12: la Fase 5 va en Together). Para el ensayo del 4.10 y la Fase 5 se usaría el plan Developer
 con un **tope de gasto de $10/mes** (límite de la consola de Groq, que bloquea la
 API al alcanzarlo). Estimación pesimista de la rejilla completa: ~$2,50, o ~$6 si
 los tokens de razonamiento triplicaran la salida. El ensayo del 4.10 medirá el
@@ -88,6 +100,14 @@ Fase 4 (verificación post-parche y bucle reflexivo):
 | 4.8 | Implementación de los oráculos de D9 (preregistro + ejecutores) | **hecho** — `oracle_juiceshop.py`, `oracle_secbench.py`: Juice Shop (3), exploit SecBench (30), T1 (17), T2 (13) |
 | 4.9 | Etiquetado y escalado de PRs | **hecho** — `publish.py`; `triage_engine.py` encadena triaje → bucle → publicación |
 | 4.10 | Ensayo de punta a punta sobre los 33 casos | **hecho** — `run_dataset.py`; 2 ensayos: 4 fallos del agente corregidos tras el primero; el segundo, 19 ACCEPTED, 11 ESCALATED, 3 NOT_TP |
+
+Fase 5 (experimentos, protocolo en [D12](../../docs/benchmark/decisions.md)):
+
+| Paso | Descripción | Estado |
+|---|---|---|
+| 5.0 | Preparación y preregistro: ejecutor, entrada versionada, few-shot de remediación, análisis probado con datos simulados | **hecho** — `phase5.py`, `phase5_analysis.py`; pendiente la congelación (tag `phase5-protocol`) |
+| 5.1 | Ejecución: triaje y remediación, 3 pasadas cada uno | pendiente |
+| 5.2–5.4 | Métricas, control ciego y estadística | `phase5_analysis.py analyze` sobre los logs de 5.1 |
 
 ## Aislamiento con worktrees (4.1)
 
@@ -842,6 +862,56 @@ botella.
   no es determinista, y una única pasada por condición mezcla el efecto de la
   estrategia con ese ruido. Es una decisión de diseño para la Fase 5.
 
+## Fase 5: ejecutor y análisis (5.0)
+
+Protocolo en [D12](../../docs/benchmark/decisions.md); instrucciones de ejecución
+en [`experiments/phase5/README.md`](../../experiments/phase5/README.md).
+
+- **`phase5.py`** ejecuta una pasada de un experimento:
+  - triaje: 83 hallazgos × 9 celdas;
+  - remediación: 33 casos × 6 condiciones, con el bucle de 3 intentos y los oráculos de D9.
+- **Orden: bloques completos aleatorizados.** Cada hallazgo hace todas sus condiciones
+  seguidas, en orden aleatorio, y los hallazgos van en orden aleatorio. La semilla es
+  20261125, distinta por experimento y pasada. Una pasada interrumpida deja bloques
+  completos, y ninguna condición queda asociada a la hora del día.
+- **Entrada versionada:** `experiments/phase5/input/findings.sarif.gz`, el SARIF de la
+  ejecución de CI 43938956025 reducido a los 92 resultados de los dos experimentos
+  (43 KB frente a 15 MB). El artefacto de CI caduca a los 30 días.
+  - `phase5.py input` lo genera y comprueba que el modelo ve exactamente el mismo
+    contexto que con el SARIF completo, en los 116 hallazgos.
+  - Cada ejecución verifica su hash contra el `MANIFEST.json`.
+- **Aparición del hallazgo:** cuando una huella aparece varias veces en el SARIF, se
+  usa la aparición de la línea que registra el CSV (`sarif_parser.pick_occurrence`).
+  Antes, `run_dataset.py` usaba la última: en json-ptr, la línea 292 en lugar de la
+  277 del objetivo, en el 4.10 y en el piloto.
+- **Salvaguardas:**
+  - la ejecución oficial exige el tag `phase5-protocol` y que el agente, el benchmark
+    y la entrada no hayan cambiado desde él (sí se pueden commitear logs entre medias);
+  - exige además `LLM_PROVIDER=together` y un tope `LLM_BUDGET_USD`;
+  - se para con código 77 si la API sirve otro modelo, 76 al tope de gasto, 75 por
+    cuota y 1 por un fallo de infraestructura;
+  - relanzar el mismo comando retoma desde el log;
+  - `--dev` permite pruebas de humo antes de congelar, con logs en `results/dev/phase5/`.
+- **Few-shot de remediación:** 3 ejemplos sintéticos (inyección SQL, de comandos y path
+  traversal), sin traza, de modo que la condición sin traza no recibe información de
+  flujo a través de ellos.
+- **`phase5_analysis.py`** aplica el análisis de D12 a los logs:
+  - PI1–PI5 con Wilcoxon (p exacto por permutación de signos con empates) y Friedman,
+    con Holm;
+  - tamaños de efecto, componentes FPR/TPR, sensibilidad (pasada 1 binaria, por fila y
+    con los UNCERTAIN), descriptivos y control de memorización.
+- **`phase5_analysis.py selftest`** prueba el análisis antes de tener datos reales:
+  - la estadística contra casos comprobables a mano;
+  - error tipo I y potencia en simulaciones: sin efecto real rechaza 2/40 y 1/40, y
+    con un efecto de la traza lo detecta en 40/40 (triaje) y 34/40 (remediación).
+
+```bash
+python scripts/ai_agent/phase5.py plan triage --rep 1          # orden de la pasada
+python scripts/ai_agent/phase5.py status                       # progreso de los logs
+python scripts/ai_agent/phase5_analysis.py selftest
+python scripts/ai_agent/phase5_analysis.py analyze             # -> experiments/phase5/analysis.md
+```
+
 ## Uso de `regression.py`
 
 ```bash
@@ -921,7 +991,10 @@ python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif 
   ```
 - **`run_dataset.py`** — el agente completo sobre los 33 casos del dataset, bajo una
   condición, reanudable y con parada limpia por cuota; publicación en dry-run e
-  informe en markdown (4.10, reutilizable en la Fase 5).
+  informe en markdown (4.10 y piloto de proveedor).
+- **`phase5.py`**, **`phase5_analysis.py`** — ejecutor y análisis de la Fase 5 (D12).
+  Ver "Fase 5: ejecutor y análisis" arriba.
+- **`pilot_compare.py`** — criterios C1–C5 del piloto de proveedor sobre sus logs.
 - **`evaluate.py`** — probe de desarrollo (NO el experimento de Fase 5): corre el
   triaje sobre el conjunto etiquetado en varios modos (`notrace` / `trace` /
   `trace+rag`) y mide el acuerdo con `labels.csv`. Para cazar bugs y ver el efecto
@@ -935,8 +1008,10 @@ python scripts/ai_agent/regression.py compare --pre pre.sarif --post post.sarif 
   # en vivo: decisión real (necesita GROQ_API_KEY)
   GROQ_API_KEY=... python scripts/ai_agent/triage.py unified/findings.sarif --fingerprint <fp> --repo-root . --run
   ```
-- **`groq_client.py`** — cliente mínimo (solo biblioteca estándar) del endpoint
-  compatible con OpenAI de Groq. Modelo fijo, clave desde el entorno.
+- **`groq_client.py`** — cliente mínimo (solo biblioteca estándar) de un endpoint
+  compatible con OpenAI: Groq por defecto, Together o DeepInfra con `LLM_PROVIDER`.
+  Modelo fijo, clave desde el entorno, `reasoning_effort` y `max_tokens` explícitos y
+  tope de gasto `LLM_BUDGET_USD`.
   ```bash
   GROQ_API_KEY=... python scripts/ai_agent/groq_client.py --selftest
   ```

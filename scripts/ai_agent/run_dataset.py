@@ -49,7 +49,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sarif_parser import Finding, SourceReader, parse_sarif
+from sarif_parser import Finding, SourceReader, parse_sarif, pick_occurrence
 from strategies import STRATEGIES, ZERO_SHOT
 
 TARGETS = Path("benchmarks/remediation-targets.csv")
@@ -81,31 +81,28 @@ class Row:
 
 
 def load_cases(repo_root: Path, findings: list[Finding], only: set[str] | None) -> list[Case]:
-    by_key = {f.label_key: f for f in findings}
     cases = []
     for r in csv.DictReader((repo_root / TARGETS).open(encoding="utf-8")):
         if only and r["id"] not in only:
             continue
+        # the occurrence on the CSV's line (before 5.0: the last one in the SARIF,
+        # which for json-ptr was line 292 instead of the target's 277)
         cases.append(Case(r["id"], r["source"], r["fingerprint"],
                           float(r["cvss"]) if r["cvss"] not in ("", "None") else None,
-                          r["auto_remediable"] == "True", by_key.get(r["fingerprint"])))
+                          r["auto_remediable"] == "True",
+                          pick_occurrence(findings, r["fingerprint"], r["line"])))
     if only and len(cases) != len(only):
         raise SystemExit(f"unknown case id(s): {sorted(only - {c.id for c in cases})}")
     return cases
 
 
-def preflight(repo_root: Path, cases: list[Case], oracles: bool, codeql: str | None) -> str:
-    """Fail before spending tokens; returns the CodeQL CLI path."""
+def llm_problems() -> list[str]:
+    """Provider settings that would fail or overspend: key, effort, max_tokens, spend cap."""
     import os
 
-    from rescan import find_codeql
-
-    problems = []
-    missing = [c.id for c in cases if c.finding is None]
-    if missing:
-        problems.append(f"targets not in this SARIF (wrong artifact?): {', '.join(missing)}")
     from groq_client import (BUDGET_ENV, budget_setting, current_provider, max_tokens_setting,
                              reasoning_effort)
+    problems = []
     try:
         provider = current_provider()
         reasoning_effort()
@@ -118,6 +115,18 @@ def preflight(repo_root: Path, cases: list[Case], oracles: bool, codeql: str | N
                             "a spend cap in USD for this run, e.g. export LLM_BUDGET_USD=1")
     except ValueError as err:
         problems.append(str(err))
+    return problems
+
+
+def preflight(repo_root: Path, cases: list[Case], oracles: bool, codeql: str | None) -> str:
+    """Fail before spending tokens; returns the CodeQL CLI path."""
+    from rescan import find_codeql
+
+    problems = []
+    missing = [c.id for c in cases if c.finding is None]
+    if missing:
+        problems.append(f"targets not in this SARIF (wrong artifact?): {', '.join(missing)}")
+    problems += llm_problems()
     try:
         cli = find_codeql(codeql)
     except Exception as err:               # noqa: BLE001 - reported with the rest

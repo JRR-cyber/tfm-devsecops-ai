@@ -1,0 +1,16 @@
+{
+ "source": {
+  "ci_run": "43938956025",
+  "artifact": "unified-findings",
+  "file": "findings.sarif",
+  "sha256": "bda1a18e9ff2bc367f9423d452c273d9cafffcc0c771bb965dd7980da2857dc5",
+  "bytes": 14983161
+ },
+ "file": "findings.sarif.gz",
+ "content_sha256": "2ea7727ffebbe05612e3fc8c2d5ff36c8136ff3160f4c1d71fc1913f0f980b5a",
+ "bytes": 43136,
+ "results": 92,
+ "triage_units": 83,
+ "remediation_units": 33,
+ "check": "pick_occurrence + render_context identical to the full SARIF for every unit"
+}

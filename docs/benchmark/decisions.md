@@ -102,6 +102,31 @@ Decisiones de diseño del conjunto experimental, con su motivo y su fecha. Alime
   - los ejemplos de few-shot cubren 3 de las clases del dataset, y se informa por clase;
   - los términos de Together (§4c) prohíben el *benchmarking*. Se interpreta que la Fase 5 evalúa estrategias de prompting de un modelo, no al proveedor. Es una lectura del autor, sin consulta a Together.
 
+**Implementación (paso 5.0, 2026-11-25).** Detalle en [`scripts/ai_agent/README.md`](../../scripts/ai_agent/README.md), «Fase 5»; ejecución en [`experiments/phase5/README.md`](../../experiments/phase5/README.md). Al implementar se fijaron estas precisiones, todas antes de cualquier dato:
+
+- **Entrada versionada.** El artefacto `unified-findings` de CI caduca a los 30 días. La entrada es `experiments/phase5/input/findings.sarif.gz`: el SARIF de la ejecución 43938956025 reducido a los 92 resultados de los 116 hallazgos de los dos experimentos (43 KB frente a 15 MB).
+  - Se comprobó que el modelo ve exactamente el mismo contexto que con el SARIF completo en los 116 hallazgos, con las cuatro combinaciones de traza y RAG.
+  - Cada ejecución verifica su hash contra `MANIFEST.json`.
+- **Aparición del hallazgo.** Una huella puede aparecer varias veces en el SARIF: le ocurre a 8 de los 116 hallazgos. Se usa la aparición de la línea que registra el CSV y, si hay varias en esa línea, la primera.
+  - Antes, `run_dataset.py` tomaba la última. En json-ptr eso era la línea 292 en vez de la 277 del objetivo, en el 4.10 y en el piloto.
+  - Queda declarado; afecta a ensayos de desarrollo, no a la Fase 5.
+- **Bloques.** Cada bloque es un hallazgo con todas sus condiciones (9 en triaje, 6 en remediación). Una pasada interrumpida deja siempre bloques completos para el análisis pareado.
+- **RSR de punta a punta.** Las ejecuciones de remediación no vuelven a triar. El filtro es el veredicto del experimento de triaje con la misma estrategia y la misma pasada, en el contexto que corresponde: completo si la condición lleva traza y ciego si no. Las dos condiciones llevan RAG.
+- **Wilcoxon.** Se descartan las diferencias nulas (método de Wilcoxon). El p es **exacto**, calculado con la distribución de permutación de signos de los rangos con empates, en lugar de la aproximación normal, que no es fiable con puntuaciones discretas (0, ⅓, ⅔, 1).
+- **Friedman.** Estadístico con corrección por empates y p de la χ² con 2 grados de libertad.
+- **Intervalos.** Bootstrap percentil con 10 000 remuestreos y semilla fija.
+- **Sensibilidad por fila.** Las filas TP + FP son 75; las 8 UNCERTAIN no tienen acierto definido.
+- **Control de memorización.** Prueba de Mann-Whitney con p por permutación.
+- **Ejecución oficial.** Exige el tag `phase5-protocol`, y que `scripts/ai_agent/`, `benchmarks/` y la entrada estén sin cambios respecto al tag. Sí se pueden commitear logs entre medias.
+  - Los parches se verifican sobre el commit del tag.
+  - Exige además `LLM_PROVIDER=together` y un tope `LLM_BUDGET_USD` por log.
+  - Se para con código 77 si la API sirve otro modelo.
+- **Pruebas antes de congelar:**
+  - `phase5_analysis.py selftest` compara la estadística con casos comprobables a mano;
+  - en 40 simulaciones sin efecto real, las pruebas de PI1 y PI4 rechazan 2 y 1 veces;
+  - con un efecto real de la traza, lo detectan 40/40 (triaje, +0,25) y 34/40 (remediación, +0,30);
+  - el ejecutor tiene 31 comprobaciones sin conexión: plan, reanudación, salvaguardas y congelación.
+
 ## D11 — La RSR se mide sobre los 33 casos; el umbral CVSS ≥ 7 es política del pipeline, no criterio del experimento (2026-11-18)
 
 **Contexto.** Al preparar el ensayo del 4.10 se fijó el hallazgo objetivo de cada caso ([`remediation-targets.csv`](../../benchmarks/remediation-targets.csv)). Resultado: solo **12 de los 33 casos** pasan el filtro de auto-remediación del roadmap (CVSS ≥ 7.0, paso 3.3). Pasan los 3 de Juice Shop (8.8), los 3 de path traversal y los 6 de ReDoS (7.5). Quedan por debajo las 12 inyecciones de comandos (6.3), las 7 contaminaciones de prototipo y las 2 inyecciones de código (6.1). La causa es que la única severidad que el pipeline tiene de un hallazgo SAST es el `security-severity` de CodeQL, que es **un número por regla**: todos los hallazgos de `js/shell-command-constructed-from-input` valen 6.3, sea cual sea el paquete. CodeQL no puede saber más. Ve un patrón en el código, no un CVE, y en un uso real un hallazgo en código propio no tiene CVE: el CVSS de NVD solo existe aquí porque el dataset se construyó con vulnerabilidades ya publicadas.

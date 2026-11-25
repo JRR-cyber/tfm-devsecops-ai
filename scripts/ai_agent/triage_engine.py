@@ -40,15 +40,17 @@ def candidates(findings: list) -> list:
 
 
 def triage_logged(target, client, reader, log, strategy: str = ZERO_SHOT,
-                  with_trace: bool = True, with_rag: bool = True) -> tuple[dict, bool]:
+                  with_trace: bool = True, with_rag: bool = True,
+                  rep: int = 1) -> tuple[dict, bool]:
     """Triage one finding, or take the verdict from the log (resume: no second call).
 
-    Returns (the logged record, whether it came from the log).
+    ``rep`` is the pass of the Phase 5 experiment (D12). Returns (the logged
+    record, whether it came from the log).
     """
     from results import TRIAGE, RunKey, triage_outcome
     from triage import decide
 
-    key = RunKey(TRIAGE, target.label_key, strategy, with_trace, with_rag)
+    key = RunKey(TRIAGE, target.label_key, strategy, with_trace, with_rag, 1, rep)
     if log.done(key):
         return log.get(key), True
     v = decide(target, client, reader, with_trace=with_trace, with_rag=with_rag, strategy=strategy)

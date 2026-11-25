@@ -134,9 +134,10 @@ def repair(finding: Finding, client, repo_root: Path, *, reader: SourceReader | 
            strategy: str = ZERO_SHOT, with_trace: bool = True, with_rag: bool = True,
            max_attempts: int = MAX_ATTEMPTS, base: str = "main", log: ResultLog | None = None,
            cli: str | None = None, checks: list[Check] | None = None,
-           verify=verify_patch) -> LoopResult:
+           verify=verify_patch, rep: int = 1) -> LoopResult:
     """Run the reflexive loop on one finding under one experimental condition.
 
+    ``rep`` is the pass of the Phase 5 experiment (D12), part of the log key.
     ``verify`` is injectable for offline tests; in real runs it is ``verify_patch``.
     """
     repo_root = repo_root.resolve()
@@ -146,7 +147,7 @@ def repair(finding: Finding, client, repo_root: Path, *, reader: SourceReader | 
     history: list[tuple[str, str]] = []
 
     for number in range(1, max_attempts + 1):
-        key = RunKey(REMEDIATION, finding.label_key, strategy, with_trace, with_rag, number)
+        key = RunKey(REMEDIATION, finding.label_key, strategy, with_trace, with_rag, number, rep)
         if log is not None and log.done(key):          # resume: rebuild from the log
             rec = log.get(key)
             attempt = Attempt(number, rec.get("diff") or "", bool(rec.get("accepted")),
