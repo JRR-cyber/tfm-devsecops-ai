@@ -20,9 +20,12 @@ Implements the protocol of ``docs/benchmark/decisions.md``, D12:
 - **Input**: ``experiments/phase5/input/findings.sarif.gz``, the CI SARIF reduced to
   the findings of both experiments (``input`` subcommand). Every run checks it
   against its MANIFEST.
-- **Freeze**: an official run needs the tag ``phase5-protocol``, and the agent code,
-  the benchmark and the input must be unchanged since it; only new logs may be
-  committed in between. ``--dev`` runs anything into ``results/dev/phase5/``.
+- **Freeze**: an official run needs the tag ``phase5-protocol-r2``, and the agent
+  code, the benchmark and the input must be unchanged since it; only new logs may
+  be committed in between. ``--dev`` runs anything into ``results/dev/phase5/``.
+  The triage passes ran under the first tag, ``phase5-protocol``; r2 only adds the
+  PARSE_ERROR outcome of the repair loop (D12 addendum of 2026-11-26), which the
+  triage code path does not use.
 - **Guards**: provider Together with gpt-oss-120b (D12). The run stops with exit 77
   if the API serves another model, 76 at the ``LLM_BUDGET_USD`` spend cap of the
   log, 75 on a provider quota, 1 on an infrastructure failure (Docker, CodeQL,
@@ -60,7 +63,7 @@ from strategies import STRATEGIES
 
 SEED = 20261125
 PROVIDER = "together"                       # D12: the whole of Phase 5 on one provider
-TAG = "phase5-protocol"
+TAG = "phase5-protocol-r2"                  # r1 = "phase5-protocol" (triage logs); see D12
 OUT = Path("experiments/phase5")
 DEV_OUT = Path("results/dev/phase5")        # git-ignored, for smoke tests before the freeze
 INPUT = OUT / "input" / "findings.sarif.gz"

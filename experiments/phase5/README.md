@@ -10,6 +10,7 @@ Protocolo: [D12](../../docs/benchmark/decisions.md). Ejecutor y análisis: `scri
 | `input/MANIFEST.json` | Origen y hashes de la entrada. Cada ejecución comprueba `content_sha256` antes de empezar. |
 | `triage-p1.jsonl` … `triage-p3.jsonl` | Triaje: una línea por llamada (83 hallazgos × 9 celdas = 747 por pasada). |
 | `remediation-p1.jsonl` … `remediation-p3.jsonl` | Remediación: una línea por intento del bucle (33 casos × 6 condiciones, hasta 3 intentos). |
+| `discarded/remediation-p1-r1.jsonl` | Las 5 filas de la primera pasada de remediación con el tag `phase5-protocol`, descartadas al congelar `phase5-protocol-r2` (apéndice de D12 del 26-11-2026). No entran en el análisis. |
 | `analysis.md` | Informe de `phase5_analysis.py analyze`. |
 
 Cada línea de log lleva la clave del intento (hallazgo, estrategia, traza, RAG, intento, pasada), el resultado, los tokens, los tiempos y la procedencia: proveedor, modelo servido, commit del protocolo y hash de la entrada.
@@ -41,6 +42,7 @@ LLM_BUDGET_USD=1.00 python scripts/ai_agent/phase5.py triage --rep 1        # ~1
 LLM_BUDGET_USD=1.00 python scripts/ai_agent/phase5.py triage --rep 2
 LLM_BUDGET_USD=1.00 python scripts/ai_agent/phase5.py triage --rep 3
 
+# La remediación se ejecuta con el tag phase5-protocol-r2 (apéndice de D12 del 26-11-2026)
 export CODEQL_CLI=~/tools/codeql/codeql.exe          # y Docker Desktop arrancado
 LLM_BUDGET_USD=1.50 python scripts/ai_agent/phase5.py remediation --rep 1   # ~10 h
 LLM_BUDGET_USD=1.50 python scripts/ai_agent/phase5.py remediation --rep 2
@@ -60,7 +62,7 @@ LLM_BUDGET_USD=1.50 python scripts/ai_agent/phase5.py remediation --rep 3
 | Código | Qué pasó | Qué hacer |
 |---|---|---|
 | 0 | La pasada terminó. | Commitear el log. |
-| 1 | Fallo de infraestructura: Docker, CodeQL o red. El intento no se registra. | Arreglar la causa, por ejemplo reiniciando Docker Desktop, y relanzar el mismo comando. |
+| 1 | Fallo de infraestructura: Docker, CodeQL o red. El intento no se registra. Un parche que deja el fichero sin parsear ya no es fallo de infraestructura: se registra como intento PARSE_ERROR. | Arreglar la causa, por ejemplo reiniciando Docker Desktop, y relanzar el mismo comando. |
 | 75 | Cuota del proveedor. | Relanzar más tarde. |
 | 76 | Tope de gasto del log. | Revisar el gasto en el panel de Together antes de subir `LLM_BUDGET_USD` y relanzar. |
 | 77 | **La API sirvió otro modelo.** | **No relanzar.** D12: se repite el experimento afectado. Hay que decidirlo antes de seguir. |

@@ -179,6 +179,44 @@ class Verification:
     baseline_cached: bool
     seconds: dict[str, float]           # baseline / post rescan wall time (overhead)
     checks: list[CheckResult] = field(default_factory=list)
+    parse_error: str = ""               # the patched file does not parse (no comparison)
+
+
+def patch_parse_errors(db: Path, scope: str, changed: list[str]) -> str:
+    """CodeQL's parse errors located in the patched file(s), as one line of text.
+
+    When the patched code is not valid JavaScript/TypeScript and it is the only
+    file in scope, ``codeql database create`` stops with "could not process any of
+    it" (exit 32). The baseline of the same scope parsed, so the patch caused it:
+    a patch outcome, not an infrastructure failure. The extractor writes the error
+    as a ``js/parse-error`` diagnostic (JSON lines under ``db/diagnostic``) with
+    the file relative to the scope. Returns "" if no such error is in a changed
+    file, so any other CodeQL failure is still raised as infrastructure.
+    """
+    import json
+    import re
+
+    wanted = {p.replace("\\", "/") for p in changed}
+    found = []
+    for path in sorted((db / "diagnostic").rglob("*.json*")):
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                diag = json.loads(line)
+            except ValueError:
+                continue
+            loc = diag.get("location") or {}
+            if (diag.get("source") or {}).get("id") != "js/parse-error" or not loc.get("file"):
+                continue
+            rel = loc["file"].replace("\\", "/")
+            full = f"{scope}/{rel}" if scope else rel
+            if full in wanted:
+                # Keep only the error itself: the rest of CodeQL's text suggests
+                # excluding the file from analysis, which is no advice for the model.
+                msg = " ".join((diag.get("plaintextMessage") or diag.get("markdownMessage") or "").split())
+                core = re.search(r"A parse error occurred: (.+?)\.(?: Check the syntax|$)", msg)
+                error = core.group(1).strip("`") if core else (msg or "parse error")
+                found.append(f"{rel}:{loc.get('startLine', '?')}:{loc.get('startColumn', '?')}: {error}")
+    return "; ".join(found)
 
 
 def _rev(repo_root: Path, ref: str) -> str:
@@ -195,11 +233,15 @@ def verify_patch(finding: Finding, diff: str, repo_root: Path, base: str = "main
     patched worktree after the post rescan; their results go in
     ``Verification.checks``.
 
+    If the post rescan fails because the patched file does not parse
+    (``patch_parse_errors``), the result has ``parse_error`` set, no comparison
+    and no checks; any other rescan failure is raised as infrastructure.
+
     The worktree and its branch are always deleted: verification only measures;
     keeping the fix and opening the PR is ``remediation_pr.prepare_pr``.
     """
     from remediation_pr import apply_by_content, branch_name
-    from rescan import rescan, scope_for
+    from rescan import RescanError, rescan, scope_for
     from worktree import default_root, worktree
 
     repo_root = repo_root.resolve()
@@ -221,7 +263,18 @@ def verify_patch(finding: Finding, diff: str, repo_root: Path, base: str = "main
         for path, content in result.changed.items():
             (wt.path / path).write_text(content, encoding="utf-8")
 
-        post = rescan(wt.path, out_root / "post" / branch.split("/")[-1], scope, cli)
+        post_dir = out_root / "post" / branch.split("/")[-1]
+        start = time.monotonic()
+        try:
+            post = rescan(wt.path, post_dir, scope, cli)
+        except RescanError:
+            # A patch that leaves the only file in scope unparseable stops CodeQL;
+            # that is a failed attempt (fed back to the model), not infrastructure.
+            parse = patch_parse_errors(post_dir / "db", scope, list(result.changed))
+            if not parse:
+                raise
+            seconds["post"] = round(time.monotonic() - start, 1)
+            return Verification(True, result.detail, None, cached, seconds, parse_error=parse)
         seconds["post"] = post.seconds
         pre_findings = parse_sarif(baseline_dir / "codeql.sarif")
         post_findings = parse_sarif(post.sarif)

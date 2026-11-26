@@ -27,6 +27,9 @@ Design decisions (README "Bucle reflexivo (4.7)"):
   history from the log and continues at the next attempt.
 - An **infrastructure** failure (CodeQL crash, network) raises and is *not*
   logged: it says nothing about the model, so the attempt is retried on resume.
+  A patch that leaves the scanned file unparseable is **not** infrastructure:
+  it is a rejected attempt (status PARSE_ERROR) with the parse error as feedback
+  (Phase 5, D12 addendum of 2026-11-26).
 
 Usage (live, needs GROQ_API_KEY and the CodeQL CLI of 4.2):
     python scripts/ai_agent/repair_loop.py <unified.sarif> --fingerprint <fp> --repo-root . \
@@ -67,6 +70,10 @@ def judge(finding: Finding, patch: Patch, verification: Verification | None) -> 
         return False, (f"The diff could not be applied ({detail}). The context and '-' lines "
                        "must be copied verbatim from the original file shown above "
                        "(same indentation, quotes and spacing); change only the lines the fix needs.")
+    if verification.parse_error:
+        return False, (f"The patched file is not valid JavaScript: {verification.parse_error}. "
+                       "CodeQL could not analyse it. Return a diff whose result parses, "
+                       "with balanced brackets and complete statements.")
 
     c = verification.comparison
     problems = []

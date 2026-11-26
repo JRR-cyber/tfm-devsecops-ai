@@ -13,7 +13,7 @@ Each line carries:
   ``attempt`` and ``rep`` (the pass of the Phase 5 experiment, D12; 1 in every
   earlier log) — used for resuming and never duplicated;
 - the **outcome** — triage verdict, or patch status (FIXED / NOT_FIXED /
-  APPLY_FAILED / NO_DIFF) with NEW / RELOCATED / PERSISTING counts from 4.3/4.4,
+  APPLY_FAILED / NO_DIFF / PARSE_ERROR) with NEW / RELOCATED / PERSISTING counts from 4.3/4.4,
   the extra oracle checks, and (4.7) whether the reflexive loop ``accepted`` the
   attempt plus the ``feedback`` it gave the model for the next one;
 - the **cost** — prompt/completion tokens, LLM seconds, rescan seconds (overhead);
@@ -43,6 +43,7 @@ from pathlib import Path
 SCHEMA_VERSION = 3   # 2 (4.7): accepted / feedback / max_attempts / checks; 3 (5.0): rep
 TRIAGE, REMEDIATION = "triage", "remediation"
 NO_DIFF, APPLY_FAILED = "NO_DIFF", "APPLY_FAILED"
+PARSE_ERROR = "PARSE_ERROR"   # the patched file does not parse (D12 addendum, 2026-11-26)
 
 # Groq list price for openai/gpt-oss-120b (USD per million tokens), as published
 # by price trackers on 2026-11-14. Used only for the summary's cost *estimate*.
@@ -176,6 +177,11 @@ def remediation_outcome(finding, patch, verification=None, base_sha: str | None 
     if verification is None or not verification.applied:
         detail = verification.detail if verification else "not verified"
         return {**out, "status": APPLY_FAILED, "apply_detail": detail}
+    if verification.parse_error:
+        return {**out, "status": PARSE_ERROR, "apply_detail": verification.detail,
+                "parse_error": verification.parse_error,
+                "baseline_cached": verification.baseline_cached,
+                "rescan_seconds": verification.seconds, "checks": []}
     c = verification.comparison
     cmp = c.as_dict()
     return {**out, "status": c.status, "relocated": c.relocated, "regression": c.regression,

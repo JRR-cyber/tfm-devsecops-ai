@@ -885,8 +885,18 @@ en [`experiments/phase5/README.md`](../../experiments/phase5/README.md).
   Antes, `run_dataset.py` usaba la última: en json-ptr, la línea 292 en lugar de la
   277 del objetivo, en el 4.10 y en el piloto.
 - **Salvaguardas:**
-  - la ejecución oficial exige el tag `phase5-protocol` y que el agente, el benchmark
-    y la entrada no hayan cambiado desde él (sí se pueden commitear logs entre medias);
+  - la ejecución oficial exige el tag `phase5-protocol-r2` y que el agente, el
+    benchmark y la entrada no hayan cambiado desde él (sí se pueden commitear logs
+    entre medias). El triaje se ejecutó con el primer tag, `phase5-protocol`; r2 solo
+    añade el resultado PARSE_ERROR del bucle (siguiente punto);
+  - **PARSE_ERROR** (apéndice de D12 del 26-11-2026): si el parche deja sin parsear el
+    único fichero JS del alcance, `codeql database create` se para («could not process
+    any of it») y antes eso paraba la ejecución como fallo de infraestructura. Ahora
+    el intento se rechaza con el error de sintaxis como feedback para el modelo
+    (`regression.patch_parse_errors` lee el diagnóstico `js/parse-error` de CodeQL).
+    Cualquier otro fallo de CodeQL sigue siendo infraestructura. Pruebas:
+    `scripts/phase5_review/test_parse_error.py` (12 comprobaciones sin conexión) y
+    una verificación real sobre tinyserver2 con un parche roto y otro válido;
   - exige además `LLM_PROVIDER=together` y un tope `LLM_BUDGET_USD`;
   - se para con código 77 si la API sirve otro modelo, 76 al tope de gasto, 75 por
     cuota y 1 por un fallo de infraestructura;
